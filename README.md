@@ -1,5 +1,7 @@
 # Galaxy Exploration
 
+[Play Galaxy Exploration](https://icequeen1024.github.io/galaxy-exploration/)
+
 A 2D JavaScript space exploration game prototype built with Vite, PixiJS, and a custom launch physics simulation. The current build focuses on launching from Homeworld, steering through gravity and atmosphere, visiting nearby planets, saving progress, buying parts, and assembling a ship in the builder.
 
 ## Features
