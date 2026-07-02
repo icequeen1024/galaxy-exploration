@@ -11,6 +11,12 @@ A 2D JavaScript space exploration game prototype built with Vite, PixiJS, and a 
 - Shop and builder screens for buying parts and equipping the active ship.
 - Unit tests for simulation and save-data behavior, plus Playwright coverage for core UI flows.
 
+## Screenshots
+
+| Launch | Builder | Travel |
+| --- | --- | --- |
+| ![Launch screen](public/assets/screenshots/launch.jpg) | ![Ship builder screen](public/assets/screenshots/builder.jpg) | ![Travel screen](public/assets/screenshots/travel.jpg) |
+
 ## Requirements
 
 - Node.js 20.19.0 or newer
