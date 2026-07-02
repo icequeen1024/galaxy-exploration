@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Galaxy Exploration</title>
+  </head>
+  <body>
+    <main id="game-shell" aria-label="Galaxy Exploration launch prototype">
+      <div id="game-canvas"></div>
+      <nav id="app-nav" aria-label="Game screens">
+        <button class="screen-tab" type="button" data-screen-target="launch" aria-pressed="true">
+          Launch
+        </button>
+        <button class="screen-tab" type="button" data-screen-target="shop" aria-pressed="false">
+          Shop
+        </button>
+        <button class="screen-tab" type="button" data-screen-target="builder" aria-pressed="false">
+          Builder
+        </button>
+        <button class="screen-tab" type="button" data-screen-target="travel" aria-pressed="false">
+          Travel
+        </button>
+      </nav>
+      <section
+        id="landing-notification"
+        data-testid="landing-notification"
+        aria-live="polite"
+        hidden
+      >
+        <strong>Landing Successful</strong>
+        <span id="landing-notification-detail">Safe touchdown.</span>
+      </section>
+      <section id="screen-panel" aria-live="polite" hidden>
+        <article class="screen-card" data-screen-panel="shop" hidden>
+          <header>
+            <p>Budget</p>
+            <strong id="shop-money">0 credits</strong>
+          </header>
+          <div class="screen-list" id="shop-parts"></div>
+        </article>
+        <article class="screen-card builder-screen" data-screen-panel="builder" hidden>
+          <header>
+            <p>Active Ship</p>
+            <div>
+              <strong id="builder-ship-name">Pioneer Test Vehicle</strong>
+              <small id="builder-status" aria-live="polite">Ready</small>
+            </div>
+          </header>
+          <div class="builder-workspace">
+            <aside class="builder-parts-panel" aria-label="Owned ship parts">
+              <span>Owned Parts</span>
+              <div id="builder-ship-parts" class="builder-parts-list"></div>
+            </aside>
+            <section class="builder-graph" aria-label="Ship part graph">
+              <div id="builder-ship-graph" class="builder-ship-graph"></div>
+            </section>
+          </div>
+        </article>
+        <article class="screen-card" data-screen-panel="travel" hidden>
+          <header>
+            <p>Known Space</p>
+            <strong id="travel-planet-count">1 world</strong>
+          </header>
+          <div class="screen-list" id="travel-planets"></div>
+        </article>
+      </section>
+      <section id="hud" data-testid="hud" aria-label="Flight telemetry">
+        <div class="mission-panel" data-testid="mission-panel">
+          <span>Mission</span>
+          <strong id="mission-title">Free Flight</strong>
+          <p id="mission-status">Ready on Homeworld</p>
+          <label class="mission-target">
+            <span>Target</span>
+            <select id="mission-target" aria-label="Mission target"></select>
+          </label>
+          <div class="save-point" id="save-point" data-testid="save-point">
+            <span>Homeworld Save Point</span>
+            <small id="save-resources">Water 25</small>
+            <button id="save-button" type="button">Save Game</button>
+            <small id="save-status" aria-live="polite">Ready</small>
+          </div>
+        </div>
+        <div class="telemetry-grid">
+          <div class="metric">
+            <span>Home Alt</span>
+            <strong id="altitude">0 m</strong>
+          </div>
+          <div class="metric">
+            <span>Speed</span>
+            <strong id="speed">0 m/s</strong>
+          </div>
+          <div class="metric">
+            <span>Fuel</span>
+            <strong id="fuel">100%</strong>
+          </div>
+          <div class="metric">
+            <span>Vertical</span>
+            <strong id="vertical-speed">0 m/s</strong>
+          </div>
+        </div>
+        <div class="controls">
+          <label class="throttle-control">
+            <span>Throttle</span>
+            <input id="throttle" type="range" min="0" max="100" value="72" />
+          </label>
+          <div class="steer-controls" aria-label="Steering controls">
+            <button id="steer-left" type="button" aria-label="Steer left">&lt;</button>
+            <button id="steer-right" type="button" aria-label="Steer right">&gt;</button>
+          </div>
+          <button id="launch-button" type="button">Launch</button>
+          <button id="reset-button" type="button">Reset</button>
+        </div>
+        <p id="outcome" aria-live="polite">Preflight</p>
+      </section>
+      <section id="result-panel" aria-live="polite" hidden>
+        <div class="result-card">
+          <span id="result-label">Mission Result</span>
+          <strong id="result-title">Preflight</strong>
+          <p id="result-summary">The ship is ready on the pad.</p>
+          <button id="retry-button" type="button">Retry</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
