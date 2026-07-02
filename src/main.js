@@ -450,7 +450,7 @@ await app.init({
 
 canvasHost.append(app.canvas);
 
-const explosionTexture = await Assets.load("/assets/explosion.png");
+const explosionTexture = await Assets.load(`${import.meta.env.BASE_URL}assets/explosion.png`);
 const scene = new Container();
 const backgroundLayer = new Container();
 const worldLayer = new Container();

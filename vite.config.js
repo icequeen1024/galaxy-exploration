@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? "/galaxy-exploration/" : "/",
   server: {
     host: "127.0.0.1",
     port: 5173,
@@ -9,4 +10,4 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 4173,
   },
-});
+}));

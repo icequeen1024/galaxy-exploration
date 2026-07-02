@@ -57,6 +57,10 @@ npm run test      # Run Vitest unit tests
 npm run test:e2e  # Run Playwright end-to-end tests
 ```
 
+## Deployment
+
+GitHub Pages is deployed by `.github/workflows/deploy-pages.yml`. In the repository Pages settings, use **GitHub Actions** as the build and deployment source so Pages publishes the Vite `dist` build instead of the raw source files.
+
 ## Project Layout
 
 ```text
