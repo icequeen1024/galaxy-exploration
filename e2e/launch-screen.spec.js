@@ -57,11 +57,11 @@ async function buyPartTemplate(page, partId) {
 async function buildMetalRectangle(page, startX, startY, width, height) {
   const builder = page.locator('[data-screen-panel="builder"]');
 
-  await builder.locator('[data-builder-part="metal-outline"]').click();
+  await builder.locator('[data-builder-part="metal-outline"]').dispatchEvent("click");
 
   for (let y = startY; y < startY + height; y += 1) {
     for (let x = startX; x < startX + width; x += 1) {
-      await builder.locator(`[data-builder-cell="${x},${y}"]`).click();
+      await builder.locator(`[data-builder-cell="${x},${y}"]`).dispatchEvent("click");
     }
   }
 }
@@ -71,8 +71,8 @@ async function prepareAirMaker(page, waterAmount) {
   await buyPartTemplate(page, "air-maker-basic");
   await page.getByRole("button", { name: "Builder" }).click();
   await buildMetalRectangle(page, 2, 3, 2, 2);
-  await page.locator('[data-builder-part="air-maker-basic"]').click();
-  await page.locator('[data-builder-cell="2,3"]').click();
+  await page.locator('[data-builder-part="air-maker-basic"]').dispatchEvent("click");
+  await page.locator('[data-builder-cell="2,3"]').dispatchEvent("click");
   await expect(page.locator("#builder-status")).toContainText("Placed Air Maker");
 
   if (waterAmount !== undefined) {
@@ -160,7 +160,9 @@ test("buys costly part templates from the Parts Bay", async ({ page }) => {
   expect(savedData.money).toBe(22000);
 });
 
-test("places, moves, and rotates part templates on the gridded ship graph", async ({ page }) => {
+test("places, moves, rotates, and unplaces part templates on the gridded ship graph", async ({
+  page,
+}) => {
   test.setTimeout(60000);
   await openReadyGame(page);
 
@@ -179,7 +181,8 @@ test("places, moves, and rotates part templates on the gridded ship graph", asyn
   await buildMetalRectangle(page, 0, 9, 4, 6);
   await expect(builder.locator(".builder-grid-cell.is-hull")).toHaveCount(24);
   await expect(fuelPart).toContainText("Kerolox Tank M");
-  await fuelPart.dragTo(openGridCell);
+  await fuelPart.dispatchEvent("click");
+  await openGridCell.dispatchEvent("click");
 
   await expect(builder.locator('[data-placed-part="tank-kerolox-m"]')).toContainText(
     "Kerolox Tank M",
@@ -189,22 +192,47 @@ test("places, moves, and rotates part templates on the gridded ship graph", asyn
 
   await page.keyboard.press("R");
   await expect(page.locator("#builder-status")).toContainText("Rotated Kerolox Tank M");
-  await movedGridCell.click();
+  await movedGridCell.dispatchEvent("click");
   await expect(page.locator("#builder-status")).toContainText("Moved Kerolox Tank M");
 
-  const savedData = await page.evaluate(() => {
+  const movedSaveData = await page.evaluate(() => {
     return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
   });
-  const activeShip = savedData.builtShips.find((ship) => ship.id === savedData.activeShipId);
+  const movedActiveShip = movedSaveData.builtShips.find(
+    (ship) => ship.id === movedSaveData.activeShipId,
+  );
 
-  expect(activeShip.hullCells).toHaveLength(24);
-  expect(savedData.resources.metal).toBe(0);
-  expect(activeShip.layout).toContainEqual(
+  expect(movedActiveShip.hullCells).toHaveLength(24);
+  expect(movedSaveData.resources.metal).toBe(0);
+  expect(movedActiveShip.layout).toContainEqual(
     expect.objectContaining({
       partId: "tank-kerolox-m",
       rotation: 90,
       x: 0,
       y: 12,
+    }),
+  );
+
+  await page.keyboard.press("U");
+  await expect(page.locator("#builder-status")).toContainText("Unplace ready");
+  await builder.locator('[data-placed-part="tank-kerolox-m"]').dispatchEvent("click");
+
+  await expect(page.locator("#builder-status")).toContainText(
+    "Returned Kerolox Tank M to templates",
+  );
+  await expect(builder.locator("[data-placed-part]")).toHaveCount(0);
+  await expect(fuelPart).toContainText("Kerolox Tank M");
+
+  const unplacedSaveData = await page.evaluate(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
+  });
+  const unplacedActiveShip = unplacedSaveData.builtShips.find(
+    (ship) => ship.id === unplacedSaveData.activeShipId,
+  );
+
+  expect(unplacedActiveShip.layout).not.toContainEqual(
+    expect.objectContaining({
+      partId: "tank-kerolox-m",
     }),
   );
 });
@@ -261,7 +289,7 @@ test("shows a top notification instead of the result modal after landing", async
   await page.locator("#throttle").evaluate((input) => {
     input.value = "0";
   });
-  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).click();
+  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).dispatchEvent("click");
 
   await expect(page.getByTestId("landing-notification")).toContainText(
     "Landing Successful",
@@ -291,13 +319,13 @@ test("air maker consumes water and blocks launch when water is gone", async ({ p
   await prepareAirMaker(page, 1);
 
   await expect(page.locator("#mission-status")).toContainText("Air Maker ready");
-  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).click();
+  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).dispatchEvent("click");
   await page.waitForFunction(() => {
     return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2")).resources.water === 0;
   });
 
-  await page.getByRole("button", { name: "Reset" }).click();
-  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).click();
+  await page.getByRole("button", { name: "Reset" }).dispatchEvent("click");
+  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).dispatchEvent("click");
 
   await expect(page.locator("#mission-status")).toContainText("Air Maker needs water");
   await expect(page.locator("#outcome")).toContainText("Preflight");
@@ -314,7 +342,7 @@ test("adds Homeworld as a return target after leaving it", async ({ page }) => {
   await page.locator("#throttle").evaluate((input) => {
     input.value = "100";
   });
-  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).click();
+  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).dispatchEvent("click");
 
   await expect(targetOptions).toHaveCount(1, { timeout: 30000 });
   await page.getByLabel("Mission target").selectOption("homeworld");

@@ -75,6 +75,7 @@ let draggedPlacedPartId = null;
 let builderStatusText = "Ready";
 let lifeSupportStatusText = "Install an Air Maker";
 let lifeSupportWaterCharged = false;
+let unplacePartArmed = false;
 
 const ROCKET_VISUAL_SCALE = 0.32;
 const ROCKET_SURFACE_OFFSET = 26;
@@ -558,6 +559,12 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (activeScreen === "builder" && event.key.toLowerCase() === "u") {
+    event.preventDefault();
+    armUnplacePart();
+    return;
+  }
+
   if (blockedThrottleKeys.has(event.key) && activeScreen === "launch") {
     event.preventDefault();
   }
@@ -793,6 +800,9 @@ function buyMetal() {
 
 function switchScreen(screenId) {
   activeScreen = screenId;
+  if (screenId !== "builder") {
+    unplacePartArmed = false;
+  }
   screenUi.container.dataset.activeScreen = screenId;
   hud.root.hidden = screenId !== "launch";
   screenUi.container.hidden = screenId === "launch";
@@ -916,6 +926,7 @@ function createMetalOutlineItem(canBuild) {
   item.addEventListener("click", () => {
     selectedBuilderPartId = METAL_OUTLINE_ID;
     selectedPlacedPartId = null;
+    unplacePartArmed = false;
     builderStatusText = metalAmount > 0 ? "Metal Outline selected" : "Buy metal in Parts Bay";
     renderPlaceholderScreens(saveData);
   });
@@ -956,6 +967,7 @@ function createBuilderPartItem(part, canBuild) {
   item.addEventListener("click", () => {
     selectedBuilderPartId = part.id;
     selectedPlacedPartId = null;
+    unplacePartArmed = false;
     builderStatusText = part.name;
     renderPlaceholderScreens(saveData);
   });
@@ -1077,11 +1089,20 @@ function createPlacedGridPart(placedPart, part, canBuild) {
     node.classList.add("is-selected");
   }
 
+  if (unplacePartArmed) {
+    node.classList.add("is-unplace-target");
+  }
+
   if (size.height <= 1 || size.width <= 2) {
     node.classList.add("is-compact");
   }
 
   node.addEventListener("click", () => {
+    if (unplacePartArmed) {
+      unplacePlacedPart(placedPart.id);
+      return;
+    }
+
     selectedBuilderPartId = part.id;
     selectedPlacedPartId = placedPart.id;
     builderStatusText = `${part.name} selected`;
@@ -1191,8 +1212,50 @@ function buildHullCell(x, y) {
   activeShip.hullCells = [...activeShip.hullCells, cellKey];
   selectedBuilderPartId = METAL_OUTLINE_ID;
   selectedPlacedPartId = null;
+  unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
   builderStatusText = `Added metal outline (${saveData.resources.metal} left)`;
+  renderPlaceholderScreens(saveData);
+}
+
+function armUnplacePart() {
+  if (!isAtHomeworldSavePoint()) {
+    unplacePartArmed = false;
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  unplacePartArmed = true;
+  selectedBuilderPartId = null;
+  selectedPlacedPartId = null;
+  builderStatusText = "Unplace ready: click a part";
+  renderPlaceholderScreens(saveData);
+}
+
+function unplacePlacedPart(placedPartId) {
+  const activeShip = activeShipFor();
+  const placedPart = layoutForShip(activeShip).find((item) => item.id === placedPartId);
+  const part = partLabels[placedPart?.partId];
+
+  if (!activeShip || !placedPart || !part) {
+    return;
+  }
+
+  if (!isAtHomeworldSavePoint()) {
+    unplacePartArmed = false;
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  activeShip.layout = layoutForShip(activeShip).filter((item) => item.id !== placedPartId);
+  activeShip.partIds = activeShip.layout.map((item) => item.partId);
+  selectedBuilderPartId = part.id;
+  selectedPlacedPartId = null;
+  unplacePartArmed = false;
+  Object.assign(saveData, saveGameData(saveData));
+  builderStatusText = `Returned ${part.name} to templates`;
   renderPlaceholderScreens(saveData);
 }
 
@@ -1240,6 +1303,7 @@ function placePartOnGrid(partId, x, y) {
   activeShip.partIds = activeShip.layout.map((item) => item.partId);
   selectedBuilderPartId = part.id;
   selectedPlacedPartId = placement.id;
+  unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
   builderStatusText = `Placed ${part.name}`;
   renderPlaceholderScreens(saveData);
@@ -1281,6 +1345,7 @@ function movePlacedPartToGrid(placedPartId, x, y) {
   activeShip.partIds = activeShip.layout.map((item) => item.partId);
   selectedBuilderPartId = part.id;
   selectedPlacedPartId = placedPartId;
+  unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
   builderStatusText = `Moved ${part.name}`;
   renderPlaceholderScreens(saveData);
@@ -1329,6 +1394,7 @@ function rotateSelectedPlacedPart() {
   activeShip.partIds = activeShip.layout.map((item) => item.partId);
   selectedBuilderPartId = part.id;
   selectedPlacedPartId = placedPart.id;
+  unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
   builderStatusText = `Rotated ${part.name}`;
   renderPlaceholderScreens(saveData);
