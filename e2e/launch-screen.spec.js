@@ -42,91 +42,64 @@ test("saves game data and resources at the Homeworld save point", async ({ page 
   });
 });
 
-test("buys new ship parts from the Homeworld shop", async ({ page }) => {
+test("lists ship part templates instead of selling upgrades", async ({ page }) => {
   test.setTimeout(60000);
   await openReadyGame(page);
 
-  await page.getByRole("button", { name: "Shop" }).click();
-  const shop = page.locator('[data-screen-panel="shop"]');
-  const tank = shop.locator('[data-part-id="tank-kerolox-m"]');
+  await page.getByRole("button", { name: "Parts" }).click();
+  const parts = page.locator('[data-screen-panel="shop"]');
+  const airMaker = parts.locator('[data-part-id="air-maker-basic"]');
+  const tank = parts.locator('[data-part-id="tank-kerolox-m"]');
 
+  await expect(parts).toContainText("Parts Bay");
+  await expect(page.locator("#shop-money")).toContainText("16 templates");
+  await expect(airMaker).toContainText("Air Maker");
+  await expect(airMaker).toContainText("Life Support | 2x2");
+  await expect(airMaker).toContainText("Required for launch");
   await expect(tank).toContainText("Kerolox Tank M");
-  await expect(tank).toContainText("4,200 credits");
-  await tank.getByRole("button", { name: "Buy" }).click();
-
-  await expect(page.locator("#shop-money")).toContainText("20,800 credits");
-  await expect(shop).toContainText("Kerolox Tank M");
-  await expect(shop.getByRole("button", { name: "Owned" })).toHaveCount(6);
-
-  const savedData = await page.evaluate(() => {
-    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v1"));
-  });
-
-  expect(savedData.unlockedParts).toContain("tank-kerolox-m");
-  expect(savedData.money).toBe(20800);
+  await expect(tank).toContainText("Fuel | 3x4");
+  await expect(parts.getByRole("button", { name: "Buy" })).toHaveCount(0);
 });
 
-test("drags owned parts onto the ship builder graph", async ({ page }) => {
+test("places part templates onto the gridded ship graph", async ({ page }) => {
   test.setTimeout(60000);
   await openReadyGame(page);
-
-  await page.getByRole("button", { name: "Shop" }).click();
-  const shop = page.locator('[data-screen-panel="shop"]');
-  await shop
-    .locator('[data-part-id="tank-kerolox-m"]')
-    .getByRole("button", { name: "Buy" })
-    .click();
-  await expect(page.locator("#shop-money")).toContainText("20,800 credits");
 
   await page.getByRole("button", { name: "Builder" }).click();
   const builder = page.locator('[data-screen-panel="builder"]');
   const fuelPart = builder.locator('[data-builder-part="tank-kerolox-m"]');
-  const fuelSlot = builder.locator('[data-builder-slot="fuel"]');
+  const openGridCell = builder.locator('[data-builder-cell="0,9"]');
 
   await expect(builder.locator(".builder-graph")).toBeVisible();
+  await expect(builder.locator(".builder-grid-frame")).toBeVisible();
+  await expect(builder.locator("[data-placed-part]")).toHaveCount(16);
+  await expect(builder.locator('[data-placed-part="air-maker-basic"]')).toContainText(
+    "Air Maker",
+  );
   await expect(fuelPart).toContainText("Kerolox Tank M");
-  await expect(fuelSlot).toContainText("Fuel Core");
-  await fuelPart.dragTo(fuelSlot);
+  await fuelPart.dragTo(openGridCell);
 
-  await expect(fuelSlot).toContainText("Kerolox Tank M");
-  await expect(page.locator("#builder-status")).toContainText("Equipped Kerolox Tank M");
+  await expect(builder.locator('[data-placed-part="tank-kerolox-m"]')).toContainText(
+    "Kerolox Tank M",
+  );
+  await expect(page.locator("#builder-status")).toContainText("Placed Kerolox Tank M");
 
   const savedData = await page.evaluate(() => {
     return JSON.parse(localStorage.getItem("galaxy-exploration.save.v1"));
   });
   const activeShip = savedData.builtShips.find((ship) => ship.id === savedData.activeShipId);
 
-  expect(activeShip.partIds).toContain("tank-kerolox-m");
+  expect(activeShip.layout).toContainEqual(
+    expect.objectContaining({
+      partId: "tank-kerolox-m",
+      x: 0,
+      y: 9,
+    }),
+  );
 });
 
-test("scrolls through all owned parts in the builder", async ({ page }) => {
+test("scrolls through all part templates in the builder", async ({ page }) => {
   await openReadyGame(page);
-
-  await page.evaluate(() => {
-    const saveKey = "galaxy-exploration.save.v1";
-    const saveData = JSON.parse(localStorage.getItem(saveKey));
-    saveData.unlockedParts = [
-      "cmd-pioneer",
-      "tank-kerolox-s",
-      "engine-swift-1",
-      "legs-light-quad",
-      "avionics-basic",
-      "tank-kerolox-m",
-      "tank-orbital-xl",
-      "engine-vector-2",
-      "engine-hawk-vac",
-      "legs-heavy-triad",
-      "heatshield-ablative",
-      "reaction-wheel-r2",
-      "science-bay-light",
-      "radar-planetary",
-    ];
-    localStorage.setItem(saveKey, JSON.stringify(saveData));
-  });
-  await page.reload();
-  await expect(page.locator("html[data-app-ready='true']")).toBeAttached({
-    timeout: 15000,
-  });
 
   await page.getByRole("button", { name: "Builder" }).click();
   const partsList = page.locator("#builder-ship-parts");
@@ -191,6 +164,33 @@ test("arrow steering keys do not change focused throttle", async ({ page }) => {
   await expect(throttle).toHaveValue("72");
 });
 
+test("air maker consumes water and blocks launch when water is gone", async ({ page }) => {
+  await openReadyGame(page);
+
+  await page.evaluate(() => {
+    const saveKey = "galaxy-exploration.save.v1";
+    const saveData = JSON.parse(localStorage.getItem(saveKey));
+    saveData.resources.water = 1;
+    localStorage.setItem(saveKey, JSON.stringify(saveData));
+  });
+  await page.reload();
+  await expect(page.locator("html[data-app-ready='true']")).toBeAttached({
+    timeout: 15000,
+  });
+
+  await expect(page.locator("#mission-status")).toContainText("Air Maker ready");
+  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).click();
+  await page.waitForFunction(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v1")).resources.water === 0;
+  });
+
+  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByTestId("hud").getByRole("button", { name: "Launch" }).click();
+
+  await expect(page.locator("#mission-status")).toContainText("Air Maker needs water");
+  await expect(page.locator("#outcome")).toContainText("Preflight");
+});
+
 test("adds Homeworld as a return target after leaving it", async ({ page }) => {
   test.setTimeout(60000);
   await openReadyGame(page);
@@ -214,20 +214,25 @@ test("switches between foundation screens", async ({ page }) => {
   test.setTimeout(60000);
   await openReadyGame(page);
 
-  await page.getByRole("button", { name: "Shop" }).click();
-  const shop = page.locator('[data-screen-panel="shop"]');
-  await expect(shop).toContainText("Budget");
-  await expect(shop).toContainText("Pioneer Command");
-  await expect(shop).toContainText("Kerolox Tank M");
-  await expect(shop).toContainText("Vector-2 Engine");
-  await expect(shop).toContainText("Planetary Radar");
+  await page.getByRole("button", { name: "Parts" }).click();
+  const parts = page.locator('[data-screen-panel="shop"]');
+  await expect(parts).toContainText("Parts Bay");
+  await expect(parts).toContainText("Pioneer Command");
+  await expect(parts).toContainText("Air Maker");
+  await expect(parts).toContainText("Kerolox Tank M");
+  await expect(parts).toContainText("Vector-2 Engine");
+  await expect(parts).toContainText("Planetary Radar");
 
   await page.getByRole("button", { name: "Builder" }).click();
   const builder = page.locator('[data-screen-panel="builder"]');
   await expect(builder.getByText("Active Ship")).toBeVisible();
   await expect(builder.getByText("Pioneer Test Vehicle")).toBeVisible();
   await expect(builder.locator(".builder-graph")).toBeVisible();
-  await expect(builder.locator('[data-builder-slot="fuel"]')).toContainText("Fuel Core");
+  await expect(builder.locator(".builder-grid-frame")).toBeVisible();
+  await expect(builder.locator("[data-placed-part]")).toHaveCount(16);
+  await expect(builder.locator('[data-placed-part="air-maker-basic"]')).toContainText(
+    "Air Maker",
+  );
   await expect(builder.locator('[data-builder-part="tank-kerolox-s"]')).toContainText(
     "Kerolox Tank S",
   );

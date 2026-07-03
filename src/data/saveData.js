@@ -4,10 +4,43 @@ export const RESOURCE_TYPES = Object.freeze(["oil", "iron", "copper", "ice", "wa
 
 export const STARTER_PART_IDS = Object.freeze([
   "cmd-pioneer",
+  "air-maker-basic",
+  "water-tank-s",
   "tank-kerolox-s",
   "engine-swift-1",
   "legs-light-quad",
   "avionics-basic",
+  "tank-kerolox-m",
+  "tank-orbital-xl",
+  "engine-vector-2",
+  "engine-hawk-vac",
+  "legs-heavy-triad",
+  "heatshield-ablative",
+  "reaction-wheel-r2",
+  "science-bay-light",
+  "radar-planetary",
+]);
+export const STARTER_SHIP_GRID = Object.freeze({
+  columns: 12,
+  rows: 16,
+});
+export const STARTER_SHIP_LAYOUT = Object.freeze([
+  { id: "layout-reaction-wheel", partId: "reaction-wheel-r2", x: 3, y: 0 },
+  { id: "layout-command", partId: "cmd-pioneer", x: 5, y: 0 },
+  { id: "layout-radar", partId: "radar-planetary", x: 8, y: 0 },
+  { id: "layout-heatshield", partId: "heatshield-ablative", x: 4, y: 2 },
+  { id: "layout-avionics", partId: "avionics-basic", x: 8, y: 2 },
+  { id: "layout-air-maker", partId: "air-maker-basic", x: 2, y: 3 },
+  { id: "layout-water", partId: "water-tank-s", x: 4, y: 3 },
+  { id: "layout-science", partId: "science-bay-light", x: 6, y: 3 },
+  { id: "layout-fuel", partId: "tank-kerolox-s", x: 3, y: 5 },
+  { id: "layout-medium-fuel", partId: "tank-kerolox-m", x: 5, y: 5 },
+  { id: "layout-vac-engine", partId: "engine-hawk-vac", x: 8, y: 5 },
+  { id: "layout-orbital-tank", partId: "tank-orbital-xl", x: 4, y: 9 },
+  { id: "layout-vector-engine", partId: "engine-vector-2", x: 8, y: 9 },
+  { id: "layout-engine", partId: "engine-swift-1", x: 8, y: 11 },
+  { id: "layout-heavy-landing", partId: "legs-heavy-triad", x: 3, y: 14 },
+  { id: "layout-landing", partId: "legs-light-quad", x: 8, y: 14 },
 ]);
 
 export const STARTER_PLANET_IDS = Object.freeze([
@@ -40,7 +73,9 @@ export function createDefaultSaveData() {
       {
         id: "ship-pioneer-test-vehicle",
         name: "Pioneer Test Vehicle",
-        partIds: [...STARTER_PART_IDS],
+        grid: { ...STARTER_SHIP_GRID },
+        layout: cloneLayout(STARTER_SHIP_LAYOUT),
+        partIds: STARTER_SHIP_LAYOUT.map((part) => part.partId),
         stats: {
           dryMass: 9000,
           fuelMass: 16000,
@@ -189,7 +224,12 @@ function normalizeBuiltShips(value, fallback) {
           ? ship.id
           : `generated-ship-${index + 1}`,
       name: typeof ship.name === "string" && ship.name.length > 0 ? ship.name : "Unnamed Ship",
-      partIds: normalizeStringList(ship.partIds, STARTER_PART_IDS),
+      grid: normalizeShipGrid(ship.grid, fallback[index]?.grid ?? STARTER_SHIP_GRID),
+      layout: normalizeShipLayout(ship.layout, fallback[index]?.layout ?? STARTER_SHIP_LAYOUT),
+      partIds: normalizeStringList(
+        ship.partIds,
+        (fallback[index]?.layout ?? STARTER_SHIP_LAYOUT).map((part) => part.partId),
+      ),
       stats: {
         dryMass: normalizePositiveNumber(ship.stats?.dryMass, 1),
         fuelMass: normalizePositiveNumber(ship.stats?.fuelMass, 0),
@@ -209,7 +249,47 @@ function normalizePositiveNumber(value, fallback) {
 function cloneShip(ship) {
   return {
     ...ship,
+    grid: { ...ship.grid },
+    layout: cloneLayout(ship.layout),
     partIds: [...ship.partIds],
     stats: { ...ship.stats },
   };
+}
+
+function normalizeShipGrid(value, fallback) {
+  const columns = Number.isFinite(value?.columns) ? Math.floor(value.columns) : fallback.columns;
+  const rows = Number.isFinite(value?.rows) ? Math.floor(value.rows) : fallback.rows;
+
+  return {
+    columns: Math.max(6, columns),
+    rows: Math.max(8, rows),
+  };
+}
+
+function normalizeShipLayout(value, fallback) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return cloneLayout(fallback);
+  }
+
+  const normalizedLayout = value
+    .filter((part) => part && typeof part === "object" && typeof part.partId === "string")
+    .map((part, index) => ({
+      id:
+        typeof part.id === "string" && part.id.length > 0
+          ? part.id
+          : `layout-part-${index + 1}`,
+      partId: part.partId,
+      x: normalizeGridPosition(part.x),
+      y: normalizeGridPosition(part.y),
+    }));
+
+  return normalizedLayout.length > 0 ? normalizedLayout : cloneLayout(fallback);
+}
+
+function normalizeGridPosition(value) {
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function cloneLayout(layout) {
+  return layout.map((part) => ({ ...part }));
 }

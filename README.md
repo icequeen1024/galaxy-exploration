@@ -2,7 +2,7 @@
 
 [Play Galaxy Exploration](https://icequeen1024.github.io/galaxy-exploration/)
 
-A 2D JavaScript space exploration game prototype built with Vite, PixiJS, and a custom launch physics simulation. The current build focuses on launching from Homeworld, steering through gravity and atmosphere, visiting nearby planets, saving progress, buying parts, and assembling a ship in the builder.
+A 2D JavaScript space exploration game prototype built with Vite, PixiJS, and a custom launch physics simulation. The current build focuses on launching from Homeworld, steering through gravity and atmosphere, visiting nearby planets, saving progress, and arranging ship parts on a graph-paper builder.
 
 ## Features
 
@@ -10,7 +10,9 @@ A 2D JavaScript space exploration game prototype built with Vite, PixiJS, and a 
 - Physics model for thrust, fuel burn, gravity, atmosphere, drag, orbit, escape, landing, and crashes.
 - Discoverable planet map with mission targeting and Homeworld return flow.
 - Local save data for money, resources, unlocked parts, built ships, mission history, and save points.
-- Shop and builder screens for buying parts and equipping the active ship.
+- Parts Bay and builder screens for placing ship parts that take up grid space.
+- Starter ship blueprint begins with the main parts already taking up graph-paper space.
+- Air Maker life support that consumes water when a launch begins and stops working when water runs out.
 - Unit tests for simulation and save-data behavior, plus Playwright coverage for core UI flows.
 
 ## Screenshots
@@ -46,7 +48,7 @@ Open the local URL printed by Vite, usually `http://127.0.0.1:5173/`.
 - Press **Launch** or the spacebar to lift off.
 - Use the left and right arrow keys, or the on-screen steering buttons, to rotate the ship.
 - Use **Reset** to return to the launch pad.
-- Switch between Launch, Shop, Builder, and Travel from the top navigation.
+- Switch between Launch, Parts, Builder, and Travel from the top navigation.
 
 ## Scripts
 
@@ -66,7 +68,7 @@ GitHub Pages is deployed by `.github/workflows/deploy-pages.yml`. In the reposit
 ## Project Layout
 
 ```text
-src/main.js                       App shell, Pixi rendering, UI state, missions, shop, and builder
+src/main.js                       App shell, Pixi rendering, UI state, missions, parts bay, and builder
 src/simulation/launchPhysics.js   Launch physics and gravity helpers
 src/data/saveData.js              Save-data schema, normalization, and localStorage persistence
 src/styles.css                    Game UI and screen styling

@@ -16,4 +16,4 @@ When a change has architectural implications, explain the choice in plain langua
 
 ## Pushing Changes
 
-When a change is complete, or when the work is large enough that it should be saved remotely, ask the user whether they want the changes committed and pushed. Do not push without the user's confirmation unless they explicitly asked for a push in the current request.
+When a change is complete, commit it and push it to the remote repository. The user has asked for completed changes to be pushed automatically, so do not stop to ask for push confirmation unless there is a merge conflict, a failing verification step, or another risk that needs a decision first.

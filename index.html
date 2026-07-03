@@ -13,7 +13,7 @@
           Launch
         </button>
         <button class="screen-tab" type="button" data-screen-target="shop" aria-pressed="false">
-          Shop
+          Parts
         </button>
         <button class="screen-tab" type="button" data-screen-target="builder" aria-pressed="false">
           Builder
@@ -34,8 +34,8 @@
       <section id="screen-panel" aria-live="polite" hidden>
         <article class="screen-card" data-screen-panel="shop" hidden>
           <header>
-            <p>Budget</p>
-            <strong id="shop-money">0 credits</strong>
+            <p>Parts Bay</p>
+            <strong id="shop-money">0 parts</strong>
           </header>
           <div class="screen-list" id="shop-parts"></div>
         </article>
@@ -48,8 +48,8 @@
             </div>
           </header>
           <div class="builder-workspace">
-            <aside class="builder-parts-panel" aria-label="Owned ship parts">
-              <span>Owned Parts</span>
+            <aside class="builder-parts-panel" aria-label="Ship part templates">
+              <span>Part Templates</span>
               <div id="builder-ship-parts" class="builder-parts-list"></div>
             </aside>
             <section class="builder-graph" aria-label="Ship part graph">

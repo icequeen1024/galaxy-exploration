@@ -1,6 +1,11 @@
 import { Application, Assets, Container, Graphics, Sprite, Text } from "pixi.js";
 import "./styles.css";
-import { RESOURCE_TYPES, loadSaveData, saveGameData } from "./data/saveData.js";
+import {
+  RESOURCE_TYPES,
+  STARTER_SHIP_GRID,
+  loadSaveData,
+  saveGameData,
+} from "./data/saveData.js";
 import {
   HOMEWORLD,
   STARTER_SHIP,
@@ -66,6 +71,8 @@ let savePointStatus = "Ready";
 let selectedBuilderPartId = null;
 let draggedBuilderPartId = null;
 let builderStatusText = "Ready";
+let lifeSupportStatusText = "Air Maker ready";
+let lifeSupportWaterCharged = false;
 
 const ROCKET_VISUAL_SCALE = 0.32;
 const ROCKET_SURFACE_OFFSET = 26;
@@ -245,160 +252,153 @@ const PART_CATALOG = [
     id: "cmd-pioneer",
     name: "Pioneer Command",
     detail: "Crew control, telemetry, guidance",
-    cost: 0,
     category: "Command",
+    width: 2,
+    height: 2,
+    color: "#dbe8f3",
+  },
+  {
+    id: "air-maker-basic",
+    name: "Air Maker",
+    detail: "Life support that turns stored water into breathable air.",
+    category: "Life Support",
+    width: 2,
+    height: 2,
+    color: "#89e8bd",
+    required: true,
+    waterUse: 1,
+  },
+  {
+    id: "water-tank-s",
+    name: "Water Tank S",
+    detail: "Stores water for the Air Maker.",
+    category: "Water",
+    width: 2,
+    height: 2,
+    color: "#6ed7ff",
   },
   {
     id: "tank-kerolox-s",
     name: "Kerolox Tank S",
     detail: "16,000 kg starter propellant",
-    cost: 0,
     category: "Fuel",
+    width: 2,
+    height: 4,
+    color: "#f2c76e",
   },
   {
     id: "engine-swift-1",
     name: "Swift-1 Engine",
     detail: "510 kN liftoff thrust",
-    cost: 0,
     category: "Engine",
+    width: 2,
+    height: 2,
+    color: "#d18861",
   },
   {
     id: "legs-light-quad",
     name: "Light Quad Legs",
     detail: "Starter landing stability",
-    cost: 0,
     category: "Landing",
+    width: 4,
+    height: 1,
+    color: "#aebbc6",
   },
   {
     id: "avionics-basic",
     name: "Basic Avionics",
     detail: "Throttle and attitude control",
-    cost: 0,
     category: "Avionics",
+    width: 2,
+    height: 1,
+    color: "#b8d6df",
   },
   {
     id: "tank-kerolox-m",
     name: "Kerolox Tank M",
     detail: "Adds more oil-fuel storage for longer launches.",
-    cost: 4200,
     category: "Fuel",
+    width: 3,
+    height: 4,
+    color: "#e9b94f",
   },
   {
     id: "tank-orbital-xl",
     name: "Orbital Tank XL",
     detail: "Heavy fuel tank for long trips between planets.",
-    cost: 9800,
     category: "Fuel",
+    width: 4,
+    height: 5,
+    color: "#d49b3d",
   },
   {
     id: "engine-vector-2",
     name: "Vector-2 Engine",
     detail: "Stronger sea-level thrust for high gravity liftoff.",
-    cost: 7600,
     category: "Engine",
+    width: 3,
+    height: 2,
+    color: "#e57d5f",
   },
   {
     id: "engine-hawk-vac",
     name: "Hawk Vacuum Engine",
     detail: "Efficient engine for steering and burns in space.",
-    cost: 6400,
     category: "Engine",
+    width: 2,
+    height: 3,
+    color: "#c96d85",
   },
   {
     id: "legs-heavy-triad",
     name: "Heavy Triad Legs",
     detail: "Wider landing stance for rough planet surfaces.",
-    cost: 3600,
     category: "Landing",
+    width: 5,
+    height: 1,
+    color: "#8fa0b2",
   },
   {
     id: "heatshield-ablative",
     name: "Ablative Heat Shield",
     detail: "Protects the ship in thicker atmospheres.",
-    cost: 5200,
     category: "Thermal",
+    width: 4,
+    height: 1,
+    color: "#9d5542",
   },
   {
     id: "reaction-wheel-r2",
     name: "R2 Reaction Wheel",
     detail: "Faster turning control without wasting fuel.",
-    cost: 4800,
     category: "Control",
+    width: 2,
+    height: 2,
+    color: "#9fb8d7",
   },
   {
     id: "science-bay-light",
     name: "Light Science Bay",
     detail: "Stores samples from planets and asteroid fields.",
-    cost: 5800,
     category: "Science",
+    width: 3,
+    height: 2,
+    color: "#c4bde0",
   },
   {
     id: "radar-planetary",
     name: "Planetary Radar",
     detail: "Improves planet scanning and landing approach data.",
-    cost: 6900,
     category: "Avionics",
+    width: 2,
+    height: 2,
+    color: "#9bd6a8",
   },
 ];
 const partLabels = Object.fromEntries(PART_CATALOG.map((part) => [part.id, part]));
-const BUILDER_SLOTS = [
-  {
-    id: "command",
-    label: "Command Nose",
-    category: "Command",
-    x: 50,
-    y: 12,
-  },
-  {
-    id: "fuel",
-    label: "Fuel Core",
-    category: "Fuel",
-    x: 50,
-    y: 34,
-  },
-  {
-    id: "engine",
-    label: "Main Engine",
-    category: "Engine",
-    x: 50,
-    y: 72,
-  },
-  {
-    id: "landing",
-    label: "Landing Gear",
-    category: "Landing",
-    x: 50,
-    y: 91,
-  },
-  {
-    id: "avionics",
-    label: "Avionics Bay",
-    category: "Avionics",
-    x: 24,
-    y: 30,
-  },
-  {
-    id: "control",
-    label: "Control Ring",
-    category: "Control",
-    x: 76,
-    y: 30,
-  },
-  {
-    id: "thermal",
-    label: "Heat Shield",
-    category: "Thermal",
-    x: 24,
-    y: 70,
-  },
-  {
-    id: "science",
-    label: "Science Mount",
-    category: "Science",
-    x: 76,
-    y: 70,
-  },
-];
+const BUILDER_GRID_COLUMNS = STARTER_SHIP_GRID.columns;
+const BUILDER_GRID_ROWS = STARTER_SHIP_GRID.rows;
+const REQUIRED_LIFE_SUPPORT_PART_ID = "air-maker-basic";
 
 const planetLabels = {
   homeworld: {
@@ -509,16 +509,17 @@ switchScreen("launch");
 function reset() {
   state = createLaunchState();
   launchRequested = false;
+  lifeSupportWaterCharged = false;
+  lifeSupportStatusText = lifeSupportStatusFor(activeShipFor()).message;
   steering.clear();
   hud.throttle.value = "72";
   resultUi.panel.hidden = true;
   landingNotification.panel.hidden = true;
+  renderPlaceholderScreens(saveData);
 }
 
 hud.launchButton.addEventListener("click", () => {
-  launchRequested = true;
-  resultUi.panel.hidden = true;
-  landingNotification.panel.hidden = true;
+  requestLaunch();
 });
 
 hud.resetButton.addEventListener("click", reset);
@@ -539,7 +540,7 @@ window.addEventListener("keydown", (event) => {
   }
 
   if (event.code === "Space") {
-    launchRequested = true;
+    requestLaunch();
   }
 });
 
@@ -578,11 +579,21 @@ function collectInput() {
   const left = steering.has("ArrowLeft") ? -1 : 0;
   const right = steering.has("ArrowRight") ? 1 : 0;
 
+  if (launchRequested && !state.launched) {
+    launchRequested = chargeLifeSupportForLaunch();
+  }
+
   return {
     launch: launchRequested,
     throttle: Number(hud.throttle.value) / 100,
     turnRate: left + right,
   };
+}
+
+function requestLaunch() {
+  launchRequested = true;
+  resultUi.panel.hidden = true;
+  landingNotification.panel.hidden = true;
 }
 
 function bindSteerButton(button, key) {
@@ -708,25 +719,6 @@ function saveAtHomeworld() {
   updateSavePoint();
 }
 
-function buyPart(partId) {
-  const part = partLabels[partId];
-
-  if (!part || saveData.unlockedParts.includes(partId) || !isAtHomeworldSavePoint()) {
-    renderPlaceholderScreens(saveData);
-    return;
-  }
-
-  if (saveData.money < part.cost) {
-    renderPlaceholderScreens(saveData);
-    return;
-  }
-
-  saveData.money -= part.cost;
-  saveData.unlockedParts.push(partId);
-  Object.assign(saveData, saveGameData(saveData));
-  renderPlaceholderScreens(saveData);
-}
-
 function switchScreen(screenId) {
   activeScreen = screenId;
   screenUi.container.dataset.activeScreen = screenId;
@@ -748,8 +740,10 @@ function switchScreen(screenId) {
 
 function renderPlaceholderScreens(data) {
   const activeShip = activeShipFor(data);
+  const partCount = PART_CATALOG.length;
+  lifeSupportStatusText = lifeSupportStatusFor(activeShip).message;
 
-  screenUi.shopMoney.textContent = `${data.money.toLocaleString()} credits`;
+  screenUi.shopMoney.textContent = `${partCount} template${partCount === 1 ? "" : "s"}`;
   screenUi.builderShipName.textContent = activeShip?.name ?? "No Ship";
   screenUi.travelPlanetCount.textContent = `${data.discoveredPlanets.length} world${
     data.discoveredPlanets.length === 1 ? "" : "s"
@@ -757,26 +751,15 @@ function renderPlaceholderScreens(data) {
 
   replaceList(
     screenUi.shopParts,
-    PART_CATALOG.map((part) => {
-      const isOwned = data.unlockedParts.includes(part.id);
-      const canShop = isAtHomeworldSavePoint();
-      const canAfford = data.money >= part.cost;
-      const price = part.cost > 0 ? `${part.cost.toLocaleString()} credits` : "Starter part";
-
-      return {
-        partId: part.id,
-        label: isOwned ? "Owned" : part.category,
-        name: part.name,
-        detail: `${part.detail} ${price}.`,
-        buttonLabel: isOwned ? "Owned" : "Buy",
-        buttonDisabled: isOwned || !canShop || !canAfford,
-        buttonTitle: shopButtonTitle(isOwned, canShop, canAfford),
-        onAction: () => buyPart(part.id),
-      };
-    }),
+    PART_CATALOG.map((part) => ({
+      partId: part.id,
+      label: `${part.category} | ${formatPartFootprint(part)}`,
+      name: part.name,
+      detail: part.required ? `${part.detail} Required for launch.` : part.detail,
+    })),
   );
 
-  renderBuilder(data, activeShip);
+  renderBuilder(activeShip);
 
   replaceList(
     screenUi.travelPlanets,
@@ -794,21 +777,18 @@ function renderPlaceholderScreens(data) {
   );
 }
 
-function renderBuilder(data, activeShip) {
+function renderBuilder(activeShip) {
   const canBuild = isAtHomeworldSavePoint();
-  const ownedParts = data.unlockedParts
-    .map((partId) => partLabels[partId])
-    .filter(Boolean);
+  const availableParts = PART_CATALOG;
+  const lifeSupport = lifeSupportStatusFor(activeShip);
+  const statusText =
+    builderStatusText === "Ready" ? lifeSupport.message : builderStatusText;
 
-  screenUi.builderStatus.textContent = canBuild ? builderStatusText : "Return to Homeworld";
+  screenUi.builderStatus.textContent = canBuild ? statusText : "Return to Homeworld";
   screenUi.builderShipParts.replaceChildren(
-    ...ownedParts.map((part) => createBuilderPartItem(part, canBuild)),
+    ...availableParts.map((part) => createBuilderPartItem(part, canBuild)),
   );
-  screenUi.builderGraph.replaceChildren(createBuilderLinks(), createShipCore());
-
-  for (const slot of BUILDER_SLOTS) {
-    screenUi.builderGraph.append(createBuilderSlot(slot, activeShip));
-  }
+  screenUi.builderGraph.replaceChildren(createShipGrid(activeShip, canBuild));
 }
 
 function createBuilderPartItem(part, canBuild) {
@@ -823,9 +803,9 @@ function createBuilderPartItem(part, canBuild) {
   item.dataset.builderPart = part.id;
   item.dataset.category = part.category;
   item.setAttribute("aria-label", `${part.name}, ${part.category}`);
-  category.textContent = part.category;
+  category.textContent = `${part.category} | ${formatPartFootprint(part)}`;
   name.textContent = part.name;
-  detail.textContent = part.detail;
+  detail.textContent = part.required ? `${part.detail} Required.` : part.detail;
   item.append(category, name, detail);
 
   if (selectedBuilderPartId === part.id) {
@@ -849,102 +829,123 @@ function createBuilderPartItem(part, canBuild) {
   return item;
 }
 
-function createBuilderLinks() {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+function activeShipFor(data = saveData) {
+  return data.builtShips.find((ship) => ship.id === data.activeShipId) ?? data.builtShips[0];
+}
 
-  svg.classList.add("builder-links");
-  svg.setAttribute("viewBox", "0 0 100 100");
-  svg.setAttribute("aria-hidden", "true");
+function createShipGrid(activeShip, canBuild) {
+  const frame = document.createElement("div");
+  const paper = document.createElement("div");
+  const ship = document.createElement("div");
+  const cells = document.createElement("div");
+  const parts = document.createElement("div");
+  const grid = gridForShip(activeShip);
+  const layout = layoutForShip(activeShip);
 
-  for (const slot of BUILDER_SLOTS) {
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", "50");
-    line.setAttribute("y1", "50");
-    line.setAttribute("x2", String(slot.x));
-    line.setAttribute("y2", String(slot.y));
-    svg.append(line);
+  frame.className = "builder-grid-frame";
+  frame.style.setProperty("--builder-cols", String(grid.columns));
+  frame.style.setProperty("--builder-rows", String(grid.rows));
+  paper.className = "builder-grid-paper";
+  ship.className = "builder-ship-outline";
+  cells.className = "builder-grid-cells";
+  parts.className = "builder-grid-parts";
+
+  for (let y = 0; y < grid.rows; y += 1) {
+    for (let x = 0; x < grid.columns; x += 1) {
+      cells.append(createBuilderCell(x, y, canBuild));
+    }
   }
 
-  return svg;
+  for (const placedPart of layout) {
+    const part = partLabels[placedPart.partId];
+
+    if (part) {
+      parts.append(createPlacedGridPart(placedPart, part));
+    }
+  }
+
+  frame.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    frame.classList.add("is-drop-target");
+  });
+  frame.addEventListener("dragleave", (event) => {
+    if (!frame.contains(event.relatedTarget)) {
+      frame.classList.remove("is-drop-target");
+    }
+  });
+  frame.addEventListener("drop", (event) => {
+    event.preventDefault();
+    frame.classList.remove("is-drop-target");
+    const cell = cellFromPointer(event, frame, grid);
+    placePartOnGrid(
+      event.dataTransfer.getData("text/plain") || draggedBuilderPartId,
+      cell.x,
+      cell.y,
+    );
+  });
+  frame.append(paper, ship, cells, parts);
+
+  return frame;
 }
 
-function createShipCore() {
-  const core = document.createElement("div");
-  const nose = document.createElement("span");
-  const body = document.createElement("span");
-  const engine = document.createElement("span");
+function createBuilderCell(x, y, canBuild) {
+  const cell = document.createElement("button");
 
-  core.className = "builder-ship-core";
-  nose.className = "builder-ship-nose";
-  body.className = "builder-ship-body";
-  engine.className = "builder-ship-engine";
-  core.append(nose, body, engine);
+  cell.className = "builder-grid-cell";
+  cell.type = "button";
+  cell.disabled = !canBuild;
+  cell.dataset.builderCell = `${x},${y}`;
+  cell.style.gridColumn = `${x + 1}`;
+  cell.style.gridRow = `${y + 1}`;
+  cell.setAttribute("aria-label", `Ship grid cell ${x + 1}, ${y + 1}`);
+  cell.addEventListener("click", () => {
+    if (selectedBuilderPartId) {
+      placePartOnGrid(selectedBuilderPartId, x, y);
+    }
+  });
 
-  return core;
+  return cell;
 }
 
-function createBuilderSlot(slot, activeShip) {
-  const equippedPart = equippedPartForSlot(activeShip, slot);
+function createPlacedGridPart(placedPart, part) {
   const node = document.createElement("button");
-  const label = document.createElement("span");
+  const category = document.createElement("span");
   const name = document.createElement("strong");
   const detail = document.createElement("small");
 
-  node.className = "builder-slot";
+  node.className = "builder-grid-part";
   node.type = "button";
-  node.dataset.builderSlot = slot.id;
-  node.dataset.category = slot.category;
-  node.style.setProperty("--x", `${slot.x}%`);
-  node.style.setProperty("--y", `${slot.y}%`);
-  node.setAttribute("aria-label", `${slot.label}, ${slot.category}`);
-  label.textContent = slot.label;
-  name.textContent = equippedPart?.name ?? "Empty";
-  detail.textContent = equippedPart?.detail ?? slot.category;
-  node.append(label, name, detail);
+  node.dataset.placedPart = placedPart.partId;
+  node.style.setProperty("--part-x", placedPart.x);
+  node.style.setProperty("--part-y", placedPart.y);
+  node.style.setProperty("--part-width", part.width);
+  node.style.setProperty("--part-height", part.height);
+  node.style.setProperty("--part-color", part.color);
+  node.setAttribute("aria-label", `${part.name}, placed on grid`);
+  category.textContent = `${part.category} | ${formatPartFootprint(part)}`;
+  name.textContent = part.name;
+  detail.textContent =
+    part.id === REQUIRED_LIFE_SUPPORT_PART_ID ? `Uses ${part.waterUse} water` : part.detail;
+  node.append(category, name, detail);
 
-  if (!equippedPart) {
-    node.classList.add("is-empty");
+  if (part.height <= 1 || part.width <= 2) {
+    node.classList.add("is-compact");
   }
 
   node.addEventListener("click", () => {
-    if (selectedBuilderPartId) {
-      equipPartToSlot(selectedBuilderPartId, slot.id);
-    }
-  });
-  node.addEventListener("dragover", (event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-    node.classList.add("is-drop-target");
-  });
-  node.addEventListener("dragleave", () => {
-    node.classList.remove("is-drop-target");
-  });
-  node.addEventListener("drop", (event) => {
-    event.preventDefault();
-    node.classList.remove("is-drop-target");
-    equipPartToSlot(event.dataTransfer.getData("text/plain") || draggedBuilderPartId, slot.id);
+    selectedBuilderPartId = part.id;
+    builderStatusText = `${part.name} selected`;
+    renderPlaceholderScreens(saveData);
   });
 
   return node;
 }
 
-function activeShipFor(data = saveData) {
-  return data.builtShips.find((ship) => ship.id === data.activeShipId) ?? data.builtShips[0];
-}
-
-function equippedPartForSlot(activeShip, slot) {
-  const partIds = [...(activeShip?.partIds ?? [])].reverse();
-  const partId = partIds.find((id) => partLabels[id]?.category === slot.category);
-
-  return partLabels[partId];
-}
-
-function equipPartToSlot(partId, slotId) {
+function placePartOnGrid(partId, x, y) {
   const part = partLabels[partId];
-  const slot = BUILDER_SLOTS.find((candidate) => candidate.id === slotId);
   const activeShip = activeShipFor();
 
-  if (!part || !slot || !activeShip) {
+  if (!part || !activeShip) {
     return;
   }
 
@@ -954,26 +955,127 @@ function equipPartToSlot(partId, slotId) {
     return;
   }
 
-  if (!saveData.unlockedParts.includes(part.id)) {
-    builderStatusText = "Part locked";
+  const grid = gridForShip(activeShip);
+  const placement = { id: `layout-${part.id}`, partId: part.id, x, y };
+  const remainingLayout = layoutForShip(activeShip).filter((item) => item.partId !== part.id);
+  const placementProblem = placementProblemFor(placement, part, remainingLayout, grid);
+
+  if (placementProblem) {
+    builderStatusText = placementProblem;
     renderPlaceholderScreens(saveData);
     return;
   }
 
-  if (part.category !== slot.category) {
-    builderStatusText = `${part.name} does not fit ${slot.label}`;
-    renderPlaceholderScreens(saveData);
-    return;
-  }
-
-  activeShip.partIds = [
-    ...activeShip.partIds.filter((id) => partLabels[id]?.category !== slot.category),
-    part.id,
-  ];
+  activeShip.layout = [...remainingLayout, placement];
+  activeShip.partIds = activeShip.layout.map((item) => item.partId);
   selectedBuilderPartId = part.id;
   Object.assign(saveData, saveGameData(saveData));
-  builderStatusText = `Equipped ${part.name}`;
+  builderStatusText = `Placed ${part.name}`;
   renderPlaceholderScreens(saveData);
+}
+
+function placementProblemFor(placement, part, layout, grid) {
+  if (
+    placement.x < 0 ||
+    placement.y < 0 ||
+    placement.x + part.width > grid.columns ||
+    placement.y + part.height > grid.rows
+  ) {
+    return `${part.name} does not fit there`;
+  }
+
+  const proposedCells = occupiedCellsFor(placement, part);
+  const hasOverlap = layout.some((placedPart) => {
+    const placedPartTemplate = partLabels[placedPart.partId];
+
+    return (
+      placedPartTemplate &&
+      occupiedCellsFor(placedPart, placedPartTemplate).some((cell) =>
+        proposedCells.includes(cell),
+      )
+    );
+  });
+
+  return hasOverlap ? `${part.name} overlaps another part` : "";
+}
+
+function occupiedCellsFor(placedPart, part) {
+  const cells = [];
+
+  for (let y = placedPart.y; y < placedPart.y + part.height; y += 1) {
+    for (let x = placedPart.x; x < placedPart.x + part.width; x += 1) {
+      cells.push(`${x},${y}`);
+    }
+  }
+
+  return cells;
+}
+
+function cellFromPointer(event, frame, grid) {
+  const rect = frame.getBoundingClientRect();
+  const x = clampNumber(
+    Math.floor(((event.clientX - rect.left) / rect.width) * grid.columns),
+    0,
+    grid.columns - 1,
+  );
+  const y = clampNumber(
+    Math.floor(((event.clientY - rect.top) / rect.height) * grid.rows),
+    0,
+    grid.rows - 1,
+  );
+
+  return { x, y };
+}
+
+function gridForShip(activeShip) {
+  return activeShip?.grid ?? { columns: BUILDER_GRID_COLUMNS, rows: BUILDER_GRID_ROWS };
+}
+
+function layoutForShip(activeShip) {
+  return Array.isArray(activeShip?.layout) ? activeShip.layout : [];
+}
+
+function lifeSupportStatusFor(activeShip) {
+  const hasAirMaker = layoutForShip(activeShip).some((part) => {
+    return part.partId === REQUIRED_LIFE_SUPPORT_PART_ID;
+  });
+  const water = saveData.resources.water ?? 0;
+
+  if (!hasAirMaker) {
+    return { ok: false, message: "Install an Air Maker" };
+  }
+
+  if (water <= 0) {
+    return { ok: false, message: "Air Maker needs water" };
+  }
+
+  return { ok: true, message: `Air Maker ready | Water ${water}` };
+}
+
+function chargeLifeSupportForLaunch() {
+  const activeShip = activeShipFor();
+  const lifeSupport = lifeSupportStatusFor(activeShip);
+
+  if (!lifeSupport.ok) {
+    lifeSupportStatusText = lifeSupport.message;
+    builderStatusText = lifeSupport.message;
+    renderPlaceholderScreens(saveData);
+    updateHud();
+    return false;
+  }
+
+  if (!lifeSupportWaterCharged) {
+    const airMaker = partLabels[REQUIRED_LIFE_SUPPORT_PART_ID];
+    const waterUse = airMaker.waterUse ?? 1;
+    saveData.resources.water = Math.max(0, (saveData.resources.water ?? 0) - waterUse);
+    Object.assign(saveData, saveGameData(saveData));
+    lifeSupportWaterCharged = true;
+    lifeSupportStatusText = `Air Maker used ${waterUse} water`;
+    builderStatusText = lifeSupportStatusText;
+    renderPlaceholderScreens(saveData);
+  }
+
+  return true;
 }
 
 function replaceList(container, items) {
@@ -1007,22 +1109,6 @@ function createScreenItem(item) {
   }
 
   return element;
-}
-
-function shopButtonTitle(isOwned, canShop, canAfford) {
-  if (isOwned) {
-    return "Already unlocked";
-  }
-
-  if (!canShop) {
-    return "Return to Homeworld to buy parts";
-  }
-
-  if (!canAfford) {
-    return "Not enough credits";
-  }
-
-  return "Buy this part";
 }
 
 function createPlanetDistanceLabel(name) {
@@ -1158,8 +1244,11 @@ function updateHud() {
 
 function missionStatusFor(outcome, missionPlanet) {
   const distance = formatDistance(distanceToPlanetSurface(missionPlanet));
+  const lifeSupport = lifeSupportStatusFor(activeShipFor());
   const statuses = {
-    Preflight: `Target: ${missionPlanet.name}, ${distance} away`,
+    Preflight: lifeSupport.ok
+      ? `Target: ${missionPlanet.name}, ${distance} away | ${lifeSupportStatusText}`
+      : lifeSupport.message,
     Launch: `Manual launch toward ${missionPlanet.name}`,
     Flight: `${missionPlanet.name} is ${distance} away`,
     Crash: `Mission to ${missionPlanet.name} failed`,
@@ -1845,6 +1934,10 @@ function formatDistance(distance) {
   }
 
   return `${Math.round(distance)} m`;
+}
+
+function formatPartFootprint(part) {
+  return `${part.width}x${part.height}`;
 }
 
 function formatResources(resources) {

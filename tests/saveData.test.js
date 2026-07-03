@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   RESOURCE_TYPES,
   SAVE_DATA_VERSION,
+  STARTER_SHIP_LAYOUT,
   STARTER_PART_IDS,
   createDefaultSaveData,
   normalizeSaveData,
 } from "../src/data/saveData.js";
 
 describe("save data", () => {
-  it("defines money, unlocked parts, discovered planets, and built ships", () => {
+  it("defines resources, available parts, discovered planets, and a gridded ship", () => {
     const saveData = createDefaultSaveData();
 
     expect(saveData.version).toBe(SAVE_DATA_VERSION);
@@ -21,7 +22,23 @@ describe("save data", () => {
     expect(saveData.builtShips[0]).toMatchObject({
       id: "ship-pioneer-test-vehicle",
       name: "Pioneer Test Vehicle",
+      grid: {
+        columns: 12,
+        rows: 16,
+      },
     });
+    expect(saveData.builtShips[0].layout).toEqual(STARTER_SHIP_LAYOUT);
+    expect(saveData.builtShips[0].layout).toHaveLength(STARTER_PART_IDS.length);
+    expect(saveData.builtShips[0].layout.map((part) => part.partId)).toEqual(
+      expect.arrayContaining(STARTER_PART_IDS),
+    );
+    expect(saveData.builtShips[0].layout).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          partId: "air-maker-basic",
+        }),
+      ]),
+    );
   });
 
   it("normalizes malformed saves back into a playable starter state", () => {
@@ -48,6 +65,7 @@ describe("save data", () => {
     expect(normalized.discoveredPlanets).toContain("homeworld");
     expect(normalized.activeMissionPlanetId).toBe("ember");
     expect(normalized.builtShips).toHaveLength(1);
+    expect(normalized.builtShips[0].layout).toEqual(STARTER_SHIP_LAYOUT);
     expect(normalized.lastSavePoint).toMatchObject({
       planetId: "homeworld",
       planetName: "Homeworld",
