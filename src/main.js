@@ -69,7 +69,9 @@ const fixedStep = 1 / 60;
 let accumulator = 0;
 let savePointStatus = "Ready";
 let selectedBuilderPartId = null;
+let selectedPlacedPartId = null;
 let draggedBuilderPartId = null;
+let draggedPlacedPartId = null;
 let builderStatusText = "Ready";
 let lifeSupportStatusText = "Air Maker ready";
 let lifeSupportWaterCharged = false;
@@ -253,6 +255,7 @@ const PART_CATALOG = [
     name: "Pioneer Command",
     detail: "Crew control, telemetry, guidance",
     category: "Command",
+    cost: 2500,
     width: 2,
     height: 2,
     color: "#dbe8f3",
@@ -262,6 +265,7 @@ const PART_CATALOG = [
     name: "Air Maker",
     detail: "Life support that turns stored water into breathable air.",
     category: "Life Support",
+    cost: 1800,
     width: 2,
     height: 2,
     color: "#89e8bd",
@@ -273,6 +277,7 @@ const PART_CATALOG = [
     name: "Water Tank S",
     detail: "Stores water for the Air Maker.",
     category: "Water",
+    cost: 800,
     width: 2,
     height: 2,
     color: "#6ed7ff",
@@ -282,6 +287,7 @@ const PART_CATALOG = [
     name: "Kerolox Tank S",
     detail: "16,000 kg starter propellant",
     category: "Fuel",
+    cost: 3200,
     width: 2,
     height: 4,
     color: "#f2c76e",
@@ -291,6 +297,7 @@ const PART_CATALOG = [
     name: "Swift-1 Engine",
     detail: "510 kN liftoff thrust",
     category: "Engine",
+    cost: 5000,
     width: 2,
     height: 2,
     color: "#d18861",
@@ -300,6 +307,7 @@ const PART_CATALOG = [
     name: "Light Quad Legs",
     detail: "Starter landing stability",
     category: "Landing",
+    cost: 1200,
     width: 4,
     height: 1,
     color: "#aebbc6",
@@ -309,6 +317,7 @@ const PART_CATALOG = [
     name: "Basic Avionics",
     detail: "Throttle and attitude control",
     category: "Avionics",
+    cost: 1600,
     width: 2,
     height: 1,
     color: "#b8d6df",
@@ -318,6 +327,7 @@ const PART_CATALOG = [
     name: "Kerolox Tank M",
     detail: "Adds more oil-fuel storage for longer launches.",
     category: "Fuel",
+    cost: 4200,
     width: 3,
     height: 4,
     color: "#e9b94f",
@@ -327,6 +337,7 @@ const PART_CATALOG = [
     name: "Orbital Tank XL",
     detail: "Heavy fuel tank for long trips between planets.",
     category: "Fuel",
+    cost: 9800,
     width: 4,
     height: 5,
     color: "#d49b3d",
@@ -336,6 +347,7 @@ const PART_CATALOG = [
     name: "Vector-2 Engine",
     detail: "Stronger sea-level thrust for high gravity liftoff.",
     category: "Engine",
+    cost: 7600,
     width: 3,
     height: 2,
     color: "#e57d5f",
@@ -345,6 +357,7 @@ const PART_CATALOG = [
     name: "Hawk Vacuum Engine",
     detail: "Efficient engine for steering and burns in space.",
     category: "Engine",
+    cost: 6400,
     width: 2,
     height: 3,
     color: "#c96d85",
@@ -354,6 +367,7 @@ const PART_CATALOG = [
     name: "Heavy Triad Legs",
     detail: "Wider landing stance for rough planet surfaces.",
     category: "Landing",
+    cost: 3600,
     width: 5,
     height: 1,
     color: "#8fa0b2",
@@ -363,6 +377,7 @@ const PART_CATALOG = [
     name: "Ablative Heat Shield",
     detail: "Protects the ship in thicker atmospheres.",
     category: "Thermal",
+    cost: 5200,
     width: 4,
     height: 1,
     color: "#9d5542",
@@ -372,6 +387,7 @@ const PART_CATALOG = [
     name: "R2 Reaction Wheel",
     detail: "Faster turning control without wasting fuel.",
     category: "Control",
+    cost: 4800,
     width: 2,
     height: 2,
     color: "#9fb8d7",
@@ -381,6 +397,7 @@ const PART_CATALOG = [
     name: "Light Science Bay",
     detail: "Stores samples from planets and asteroid fields.",
     category: "Science",
+    cost: 5800,
     width: 3,
     height: 2,
     color: "#c4bde0",
@@ -390,6 +407,7 @@ const PART_CATALOG = [
     name: "Planetary Radar",
     detail: "Improves planet scanning and landing approach data.",
     category: "Avionics",
+    cost: 6900,
     width: 2,
     height: 2,
     color: "#9bd6a8",
@@ -531,6 +549,12 @@ bindSteerButton(hud.steerRight, "ArrowRight");
 const blockedThrottleKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
 
 window.addEventListener("keydown", (event) => {
+  if (activeScreen === "builder" && event.key.toLowerCase() === "r") {
+    event.preventDefault();
+    rotateSelectedPlacedPart();
+    return;
+  }
+
   if (blockedThrottleKeys.has(event.key) && activeScreen === "launch") {
     event.preventDefault();
   }
@@ -719,6 +743,29 @@ function saveAtHomeworld() {
   updateSavePoint();
 }
 
+function buyPart(partId) {
+  const part = partLabels[partId];
+
+  if (!part || saveData.unlockedParts.includes(partId) || !isAtHomeworldSavePoint()) {
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  if (saveData.money < part.cost) {
+    builderStatusText = "Not enough credits";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  saveData.money -= part.cost;
+  saveData.unlockedParts.push(partId);
+  selectedBuilderPartId = partId;
+  selectedPlacedPartId = null;
+  builderStatusText = `Bought ${part.name}`;
+  Object.assign(saveData, saveGameData(saveData));
+  renderPlaceholderScreens(saveData);
+}
+
 function switchScreen(screenId) {
   activeScreen = screenId;
   screenUi.container.dataset.activeScreen = screenId;
@@ -740,10 +787,9 @@ function switchScreen(screenId) {
 
 function renderPlaceholderScreens(data) {
   const activeShip = activeShipFor(data);
-  const partCount = PART_CATALOG.length;
   lifeSupportStatusText = lifeSupportStatusFor(activeShip).message;
 
-  screenUi.shopMoney.textContent = `${partCount} template${partCount === 1 ? "" : "s"}`;
+  screenUi.shopMoney.textContent = `${data.money.toLocaleString()} credits`;
   screenUi.builderShipName.textContent = activeShip?.name ?? "No Ship";
   screenUi.travelPlanetCount.textContent = `${data.discoveredPlanets.length} world${
     data.discoveredPlanets.length === 1 ? "" : "s"
@@ -751,12 +797,24 @@ function renderPlaceholderScreens(data) {
 
   replaceList(
     screenUi.shopParts,
-    PART_CATALOG.map((part) => ({
-      partId: part.id,
-      label: `${part.category} | ${formatPartFootprint(part)}`,
-      name: part.name,
-      detail: part.required ? `${part.detail} Required for launch.` : part.detail,
-    })),
+    PART_CATALOG.map((part) => {
+      const isOwned = data.unlockedParts.includes(part.id);
+      const canShop = isAtHomeworldSavePoint();
+      const canAfford = data.money >= part.cost;
+
+      return {
+        partId: part.id,
+        label: isOwned ? `Owned | ${part.category}` : part.category,
+        name: part.name,
+        detail: `${formatPartFootprint(part)} | ${part.cost.toLocaleString()} credits. ${
+          part.required ? `${part.detail} Required for launch.` : part.detail
+        }`,
+        buttonLabel: isOwned ? "Owned" : "Buy",
+        buttonDisabled: isOwned || !canShop || !canAfford,
+        buttonTitle: partsBayButtonTitle(isOwned, canShop, canAfford),
+        onAction: () => buyPart(part.id),
+      };
+    }),
   );
 
   renderBuilder(activeShip);
@@ -779,10 +837,14 @@ function renderPlaceholderScreens(data) {
 
 function renderBuilder(activeShip) {
   const canBuild = isAtHomeworldSavePoint();
-  const availableParts = PART_CATALOG;
+  const availableParts = saveData.unlockedParts
+    .map((partId) => partLabels[partId])
+    .filter(Boolean);
   const lifeSupport = lifeSupportStatusFor(activeShip);
   const statusText =
-    builderStatusText === "Ready" ? lifeSupport.message : builderStatusText;
+    builderStatusText === "Ready"
+      ? `${lifeSupport.message} | ${availableParts.length} owned parts`
+      : builderStatusText;
 
   screenUi.builderStatus.textContent = canBuild ? statusText : "Return to Homeworld";
   screenUi.builderShipParts.replaceChildren(
@@ -814,13 +876,15 @@ function createBuilderPartItem(part, canBuild) {
 
   item.addEventListener("click", () => {
     selectedBuilderPartId = part.id;
+    selectedPlacedPartId = null;
     builderStatusText = part.name;
     renderPlaceholderScreens(saveData);
   });
   item.addEventListener("dragstart", (event) => {
     draggedBuilderPartId = part.id;
+    draggedPlacedPartId = null;
     event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData("text/plain", part.id);
+    event.dataTransfer.setData("text/plain", `part:${part.id}`);
   });
   item.addEventListener("dragend", () => {
     draggedBuilderPartId = null;
@@ -860,7 +924,7 @@ function createShipGrid(activeShip, canBuild) {
     const part = partLabels[placedPart.partId];
 
     if (part) {
-      parts.append(createPlacedGridPart(placedPart, part));
+      parts.append(createPlacedGridPart(placedPart, part, canBuild));
     }
   }
 
@@ -877,11 +941,7 @@ function createShipGrid(activeShip, canBuild) {
     event.preventDefault();
     frame.classList.remove("is-drop-target");
     const cell = cellFromPointer(event, frame, grid);
-    placePartOnGrid(
-      event.dataTransfer.getData("text/plain") || draggedBuilderPartId,
-      cell.x,
-      cell.y,
-    );
+    placeDroppedBuilderItem(event.dataTransfer.getData("text/plain"), cell.x, cell.y);
   });
   frame.append(paper, ship, cells, parts);
 
@@ -899,46 +959,96 @@ function createBuilderCell(x, y, canBuild) {
   cell.style.gridRow = `${y + 1}`;
   cell.setAttribute("aria-label", `Ship grid cell ${x + 1}, ${y + 1}`);
   cell.addEventListener("click", () => {
-    if (selectedBuilderPartId) {
-      placePartOnGrid(selectedBuilderPartId, x, y);
-    }
+    placeBuilderSelectionAt(x, y);
   });
 
   return cell;
 }
 
-function createPlacedGridPart(placedPart, part) {
+function createPlacedGridPart(placedPart, part, canBuild) {
   const node = document.createElement("button");
   const category = document.createElement("span");
   const name = document.createElement("strong");
   const detail = document.createElement("small");
+  const size = rotatedPartSize(part, placedPart.rotation);
 
   node.className = "builder-grid-part";
   node.type = "button";
+  node.draggable = canBuild;
   node.dataset.placedPart = placedPart.partId;
+  node.dataset.placedId = placedPart.id;
+  node.dataset.rotation = String(placedPart.rotation ?? 0);
   node.style.setProperty("--part-x", placedPart.x);
   node.style.setProperty("--part-y", placedPart.y);
-  node.style.setProperty("--part-width", part.width);
-  node.style.setProperty("--part-height", part.height);
+  node.style.setProperty("--part-width", size.width);
+  node.style.setProperty("--part-height", size.height);
   node.style.setProperty("--part-color", part.color);
   node.setAttribute("aria-label", `${part.name}, placed on grid`);
-  category.textContent = `${part.category} | ${formatPartFootprint(part)}`;
+  category.textContent = `${part.category} | ${formatPartFootprint(part, placedPart.rotation)}`;
   name.textContent = part.name;
   detail.textContent =
     part.id === REQUIRED_LIFE_SUPPORT_PART_ID ? `Uses ${part.waterUse} water` : part.detail;
   node.append(category, name, detail);
 
-  if (part.height <= 1 || part.width <= 2) {
+  if (placedPart.id === selectedPlacedPartId) {
+    node.classList.add("is-selected");
+  }
+
+  if (size.height <= 1 || size.width <= 2) {
     node.classList.add("is-compact");
   }
 
   node.addEventListener("click", () => {
     selectedBuilderPartId = part.id;
+    selectedPlacedPartId = placedPart.id;
     builderStatusText = `${part.name} selected`;
     renderPlaceholderScreens(saveData);
   });
+  node.addEventListener("dragstart", (event) => {
+    selectedBuilderPartId = part.id;
+    selectedPlacedPartId = placedPart.id;
+    draggedBuilderPartId = null;
+    draggedPlacedPartId = placedPart.id;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `placed:${placedPart.id}`);
+  });
+  node.addEventListener("dragend", () => {
+    draggedPlacedPartId = null;
+  });
 
   return node;
+}
+
+function placeDroppedBuilderItem(dataTransferValue, x, y) {
+  if (dataTransferValue?.startsWith("placed:")) {
+    movePlacedPartToGrid(dataTransferValue.slice("placed:".length), x, y);
+    return;
+  }
+
+  if (dataTransferValue?.startsWith("part:")) {
+    placePartOnGrid(dataTransferValue.slice("part:".length), x, y);
+    return;
+  }
+
+  if (draggedPlacedPartId) {
+    movePlacedPartToGrid(draggedPlacedPartId, x, y);
+    return;
+  }
+
+  if (draggedBuilderPartId) {
+    placePartOnGrid(draggedBuilderPartId, x, y);
+  }
+}
+
+function placeBuilderSelectionAt(x, y) {
+  if (selectedPlacedPartId) {
+    movePlacedPartToGrid(selectedPlacedPartId, x, y);
+    return;
+  }
+
+  if (selectedBuilderPartId) {
+    placePartOnGrid(selectedBuilderPartId, x, y);
+  }
 }
 
 function placePartOnGrid(partId, x, y) {
@@ -949,6 +1059,12 @@ function placePartOnGrid(partId, x, y) {
     return;
   }
 
+  if (!saveData.unlockedParts.includes(part.id)) {
+    builderStatusText = "Buy that part first";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
   if (!isAtHomeworldSavePoint()) {
     builderStatusText = "Return to Homeworld";
     renderPlaceholderScreens(saveData);
@@ -956,8 +1072,11 @@ function placePartOnGrid(partId, x, y) {
   }
 
   const grid = gridForShip(activeShip);
-  const placement = { id: `layout-${part.id}`, partId: part.id, x, y };
-  const remainingLayout = layoutForShip(activeShip).filter((item) => item.partId !== part.id);
+  const existingPlacement = layoutForShip(activeShip).find((item) => item.partId === part.id);
+  const placement = existingPlacement
+    ? { ...existingPlacement, x, y }
+    : { id: `layout-${part.id}`, partId: part.id, x, y, rotation: 0 };
+  const remainingLayout = layoutForShip(activeShip).filter((item) => item.id !== placement.id);
   const placementProblem = placementProblemFor(placement, part, remainingLayout, grid);
 
   if (placementProblem) {
@@ -969,17 +1088,97 @@ function placePartOnGrid(partId, x, y) {
   activeShip.layout = [...remainingLayout, placement];
   activeShip.partIds = activeShip.layout.map((item) => item.partId);
   selectedBuilderPartId = part.id;
+  selectedPlacedPartId = placement.id;
   Object.assign(saveData, saveGameData(saveData));
   builderStatusText = `Placed ${part.name}`;
   renderPlaceholderScreens(saveData);
 }
 
+function movePlacedPartToGrid(placedPartId, x, y) {
+  const activeShip = activeShipFor();
+  const placedPart = layoutForShip(activeShip).find((item) => item.id === placedPartId);
+  const part = partLabels[placedPart?.partId];
+
+  if (!activeShip || !placedPart || !part) {
+    return;
+  }
+
+  if (!isAtHomeworldSavePoint()) {
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  const grid = gridForShip(activeShip);
+  const movedPart = { ...placedPart, x, y };
+  const remainingLayout = layoutForShip(activeShip).filter((item) => item.id !== placedPartId);
+  const placementProblem = placementProblemFor(movedPart, part, remainingLayout, grid);
+
+  if (placementProblem) {
+    builderStatusText = placementProblem;
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  activeShip.layout = [...remainingLayout, movedPart];
+  activeShip.partIds = activeShip.layout.map((item) => item.partId);
+  selectedBuilderPartId = part.id;
+  selectedPlacedPartId = placedPartId;
+  Object.assign(saveData, saveGameData(saveData));
+  builderStatusText = `Moved ${part.name}`;
+  renderPlaceholderScreens(saveData);
+}
+
+function rotateSelectedPlacedPart() {
+  const activeShip = activeShipFor();
+  const placedPart = layoutForShip(activeShip).find((item) => item.id === selectedPlacedPartId);
+  const part = partLabels[placedPart?.partId];
+
+  if (!activeShip || !placedPart || !part) {
+    builderStatusText = "Select a placed part to rotate";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  if (!isAtHomeworldSavePoint()) {
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  const grid = gridForShip(activeShip);
+  const rotatedPart = {
+    ...placedPart,
+    rotation: nextRotation(placedPart.rotation),
+  };
+  const remainingLayout = layoutForShip(activeShip).filter((item) => {
+    return item.id !== placedPart.id;
+  });
+  const placementProblem = placementProblemFor(rotatedPart, part, remainingLayout, grid);
+
+  if (placementProblem) {
+    builderStatusText = `Cannot rotate: ${placementProblem}`;
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  activeShip.layout = [...remainingLayout, rotatedPart];
+  activeShip.partIds = activeShip.layout.map((item) => item.partId);
+  selectedBuilderPartId = part.id;
+  selectedPlacedPartId = placedPart.id;
+  Object.assign(saveData, saveGameData(saveData));
+  builderStatusText = `Rotated ${part.name}`;
+  renderPlaceholderScreens(saveData);
+}
+
 function placementProblemFor(placement, part, layout, grid) {
+  const size = rotatedPartSize(part, placement.rotation);
+
   if (
     placement.x < 0 ||
     placement.y < 0 ||
-    placement.x + part.width > grid.columns ||
-    placement.y + part.height > grid.rows
+    placement.x + size.width > grid.columns ||
+    placement.y + size.height > grid.rows
   ) {
     return `${part.name} does not fit there`;
   }
@@ -1001,14 +1200,35 @@ function placementProblemFor(placement, part, layout, grid) {
 
 function occupiedCellsFor(placedPart, part) {
   const cells = [];
+  const size = rotatedPartSize(part, placedPart.rotation);
 
-  for (let y = placedPart.y; y < placedPart.y + part.height; y += 1) {
-    for (let x = placedPart.x; x < placedPart.x + part.width; x += 1) {
+  for (let y = placedPart.y; y < placedPart.y + size.height; y += 1) {
+    for (let x = placedPart.x; x < placedPart.x + size.width; x += 1) {
       cells.push(`${x},${y}`);
     }
   }
 
   return cells;
+}
+
+function rotatedPartSize(part, rotation = 0) {
+  const normalizedRotation = normalizePartRotation(rotation);
+  const isSideways = normalizedRotation === 90 || normalizedRotation === 270;
+
+  return {
+    width: isSideways ? part.height : part.width,
+    height: isSideways ? part.width : part.height,
+  };
+}
+
+function normalizePartRotation(rotation = 0) {
+  const quarterTurns = Number.isFinite(rotation) ? Math.round(rotation / 90) : 0;
+
+  return ((quarterTurns % 4) + 4) % 4 * 90;
+}
+
+function nextRotation(rotation = 0) {
+  return (normalizePartRotation(rotation) + 90) % 360;
 }
 
 function cellFromPointer(event, frame, grid) {
@@ -1109,6 +1329,22 @@ function createScreenItem(item) {
   }
 
   return element;
+}
+
+function partsBayButtonTitle(isOwned, canShop, canAfford) {
+  if (isOwned) {
+    return "Already owned";
+  }
+
+  if (!canShop) {
+    return "Return to Homeworld to buy parts";
+  }
+
+  if (!canAfford) {
+    return "Not enough credits";
+  }
+
+  return "Buy this part";
 }
 
 function createPlanetDistanceLabel(name) {
@@ -1936,8 +2172,10 @@ function formatDistance(distance) {
   return `${Math.round(distance)} m`;
 }
 
-function formatPartFootprint(part) {
-  return `${part.width}x${part.height}`;
+function formatPartFootprint(part, rotation = 0) {
+  const size = rotatedPartSize(part, rotation);
+
+  return `${size.width}x${size.height}`;
 }
 
 function formatResources(resources) {

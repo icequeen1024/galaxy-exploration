@@ -17,6 +17,7 @@ describe("save data", () => {
     expect(saveData.resources.water).toBeGreaterThan(0);
     expect(Object.keys(saveData.resources)).toEqual(RESOURCE_TYPES);
     expect(saveData.unlockedParts).toEqual(expect.arrayContaining(STARTER_PART_IDS));
+    expect(saveData.unlockedParts).not.toContain("tank-kerolox-m");
     expect(saveData.discoveredPlanets).toContain("homeworld");
     expect(saveData.activeMissionPlanetId).toBe("ember");
     expect(saveData.builtShips[0]).toMatchObject({

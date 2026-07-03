@@ -419,6 +419,11 @@ select {
   border-color: rgb(5 16 28 / 76%);
 }
 
+.builder-grid-part.is-selected {
+  border-color: #07111d;
+  box-shadow: 0 0 0 3px rgb(110 215 255 / 54%), 0 8px 18px rgb(6 15 26 / 28%);
+}
+
 .builder-grid-part.is-compact {
   align-content: center;
   padding: 5px;

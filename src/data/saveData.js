@@ -10,15 +10,9 @@ export const STARTER_PART_IDS = Object.freeze([
   "engine-swift-1",
   "legs-light-quad",
   "avionics-basic",
-  "tank-kerolox-m",
-  "tank-orbital-xl",
-  "engine-vector-2",
-  "engine-hawk-vac",
-  "legs-heavy-triad",
   "heatshield-ablative",
   "reaction-wheel-r2",
   "science-bay-light",
-  "radar-planetary",
 ]);
 export const STARTER_SHIP_GRID = Object.freeze({
   columns: 12,
@@ -27,20 +21,14 @@ export const STARTER_SHIP_GRID = Object.freeze({
 export const STARTER_SHIP_LAYOUT = Object.freeze([
   { id: "layout-reaction-wheel", partId: "reaction-wheel-r2", x: 3, y: 0 },
   { id: "layout-command", partId: "cmd-pioneer", x: 5, y: 0 },
-  { id: "layout-radar", partId: "radar-planetary", x: 8, y: 0 },
   { id: "layout-heatshield", partId: "heatshield-ablative", x: 4, y: 2 },
   { id: "layout-avionics", partId: "avionics-basic", x: 8, y: 2 },
   { id: "layout-air-maker", partId: "air-maker-basic", x: 2, y: 3 },
   { id: "layout-water", partId: "water-tank-s", x: 4, y: 3 },
   { id: "layout-science", partId: "science-bay-light", x: 6, y: 3 },
   { id: "layout-fuel", partId: "tank-kerolox-s", x: 3, y: 5 },
-  { id: "layout-medium-fuel", partId: "tank-kerolox-m", x: 5, y: 5 },
-  { id: "layout-vac-engine", partId: "engine-hawk-vac", x: 8, y: 5 },
-  { id: "layout-orbital-tank", partId: "tank-orbital-xl", x: 4, y: 9 },
-  { id: "layout-vector-engine", partId: "engine-vector-2", x: 8, y: 9 },
-  { id: "layout-engine", partId: "engine-swift-1", x: 8, y: 11 },
-  { id: "layout-heavy-landing", partId: "legs-heavy-triad", x: 3, y: 14 },
-  { id: "layout-landing", partId: "legs-light-quad", x: 8, y: 14 },
+  { id: "layout-engine", partId: "engine-swift-1", x: 6, y: 9 },
+  { id: "layout-landing", partId: "legs-light-quad", x: 4, y: 13 },
 ]);
 
 export const STARTER_PLANET_IDS = Object.freeze([
@@ -281,6 +269,7 @@ function normalizeShipLayout(value, fallback) {
       partId: part.partId,
       x: normalizeGridPosition(part.x),
       y: normalizeGridPosition(part.y),
+      rotation: normalizeRotation(part.rotation),
     }));
 
   return normalizedLayout.length > 0 ? normalizedLayout : cloneLayout(fallback);
@@ -288,6 +277,16 @@ function normalizeShipLayout(value, fallback) {
 
 function normalizeGridPosition(value) {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function normalizeRotation(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  const quarterTurns = Math.round(value / 90);
+
+  return ((quarterTurns % 4) + 4) % 4 * 90;
 }
 
 function cloneLayout(layout) {
