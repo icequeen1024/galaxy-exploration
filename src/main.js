@@ -73,7 +73,7 @@ let selectedPlacedPartId = null;
 let draggedBuilderPartId = null;
 let draggedPlacedPartId = null;
 let builderStatusText = "Ready";
-let lifeSupportStatusText = "Air Maker ready";
+let lifeSupportStatusText = "Install an Air Maker";
 let lifeSupportWaterCharged = false;
 
 const ROCKET_VISUAL_SCALE = 0.32;
@@ -417,6 +417,9 @@ const partLabels = Object.fromEntries(PART_CATALOG.map((part) => [part.id, part]
 const BUILDER_GRID_COLUMNS = STARTER_SHIP_GRID.columns;
 const BUILDER_GRID_ROWS = STARTER_SHIP_GRID.rows;
 const REQUIRED_LIFE_SUPPORT_PART_ID = "air-maker-basic";
+const METAL_OUTLINE_ID = "metal-outline";
+const METAL_PACK_SIZE = 12;
+const METAL_PACK_COST = 1200;
 
 const planetLabels = {
   homeworld: {
@@ -766,6 +769,28 @@ function buyPart(partId) {
   renderPlaceholderScreens(saveData);
 }
 
+function buyMetal() {
+  if (!isAtHomeworldSavePoint()) {
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  if (saveData.money < METAL_PACK_COST) {
+    builderStatusText = "Not enough credits";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  saveData.money -= METAL_PACK_COST;
+  saveData.resources.metal = (saveData.resources.metal ?? 0) + METAL_PACK_SIZE;
+  selectedBuilderPartId = METAL_OUTLINE_ID;
+  selectedPlacedPartId = null;
+  builderStatusText = `Bought ${METAL_PACK_SIZE} metal`;
+  Object.assign(saveData, saveGameData(saveData));
+  renderPlaceholderScreens(saveData);
+}
+
 function switchScreen(screenId) {
   activeScreen = screenId;
   screenUi.container.dataset.activeScreen = screenId;
@@ -788,18 +813,28 @@ function switchScreen(screenId) {
 function renderPlaceholderScreens(data) {
   const activeShip = activeShipFor(data);
   lifeSupportStatusText = lifeSupportStatusFor(activeShip).message;
+  const metalAmount = data.resources.metal ?? 0;
 
-  screenUi.shopMoney.textContent = `${data.money.toLocaleString()} credits`;
+  screenUi.shopMoney.textContent = `${data.money.toLocaleString()} credits | Metal ${metalAmount}`;
   screenUi.builderShipName.textContent = activeShip?.name ?? "No Ship";
   screenUi.travelPlanetCount.textContent = `${data.discoveredPlanets.length} world${
     data.discoveredPlanets.length === 1 ? "" : "s"
   }`;
 
-  replaceList(
-    screenUi.shopParts,
-    PART_CATALOG.map((part) => {
+  const canShop = isAtHomeworldSavePoint();
+  replaceList(screenUi.shopParts, [
+    {
+      partId: METAL_OUTLINE_ID,
+      label: "Ship Outline",
+      name: "Metal Pack",
+      detail: `${METAL_PACK_SIZE} metal cells | ${METAL_PACK_COST.toLocaleString()} credits. Use metal on the graph to make spaces where bought parts can be installed.`,
+      buttonLabel: "Buy",
+      buttonDisabled: !canShop || data.money < METAL_PACK_COST,
+      buttonTitle: partsBayButtonTitle(false, canShop, data.money >= METAL_PACK_COST),
+      onAction: buyMetal,
+    },
+    ...PART_CATALOG.map((part) => {
       const isOwned = data.unlockedParts.includes(part.id);
-      const canShop = isAtHomeworldSavePoint();
       const canAfford = data.money >= part.cost;
 
       return {
@@ -815,7 +850,7 @@ function renderPlaceholderScreens(data) {
         onAction: () => buyPart(part.id),
       };
     }),
-  );
+  ]);
 
   renderBuilder(activeShip);
 
@@ -841,16 +876,60 @@ function renderBuilder(activeShip) {
     .map((partId) => partLabels[partId])
     .filter(Boolean);
   const lifeSupport = lifeSupportStatusFor(activeShip);
+  const metalAmount = saveData.resources.metal ?? 0;
+  const outlineCells = hullCellsForShip(activeShip).size;
   const statusText =
     builderStatusText === "Ready"
-      ? `${lifeSupport.message} | ${availableParts.length} owned parts`
+      ? `${lifeSupport.message} | Metal ${metalAmount} | Outline ${outlineCells} cells | ${availableParts.length} owned parts`
       : builderStatusText;
 
   screenUi.builderStatus.textContent = canBuild ? statusText : "Return to Homeworld";
   screenUi.builderShipParts.replaceChildren(
+    createMetalOutlineItem(canBuild),
     ...availableParts.map((part) => createBuilderPartItem(part, canBuild)),
   );
   screenUi.builderGraph.replaceChildren(createShipGrid(activeShip, canBuild));
+}
+
+function createMetalOutlineItem(canBuild) {
+  const item = document.createElement("button");
+  const category = document.createElement("span");
+  const name = document.createElement("strong");
+  const detail = document.createElement("small");
+  const metalAmount = saveData.resources.metal ?? 0;
+
+  item.className = "builder-part builder-part-metal";
+  item.type = "button";
+  item.draggable = canBuild;
+  item.dataset.builderPart = METAL_OUTLINE_ID;
+  item.dataset.category = "Outline";
+  item.setAttribute("aria-label", "Metal Outline, one graph cell");
+  category.textContent = "Outline | 1 cell";
+  name.textContent = "Metal Outline";
+  detail.textContent = `${metalAmount} metal ready. Each graph cell costs 1 metal.`;
+  item.append(category, name, detail);
+
+  if (selectedBuilderPartId === METAL_OUTLINE_ID) {
+    item.classList.add("is-selected");
+  }
+
+  item.addEventListener("click", () => {
+    selectedBuilderPartId = METAL_OUTLINE_ID;
+    selectedPlacedPartId = null;
+    builderStatusText = metalAmount > 0 ? "Metal Outline selected" : "Buy metal in Parts Bay";
+    renderPlaceholderScreens(saveData);
+  });
+  item.addEventListener("dragstart", (event) => {
+    draggedBuilderPartId = METAL_OUTLINE_ID;
+    draggedPlacedPartId = null;
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("text/plain", `part:${METAL_OUTLINE_ID}`);
+  });
+  item.addEventListener("dragend", () => {
+    draggedBuilderPartId = null;
+  });
+
+  return item;
 }
 
 function createBuilderPartItem(part, canBuild) {
@@ -905,6 +984,7 @@ function createShipGrid(activeShip, canBuild) {
   const parts = document.createElement("div");
   const grid = gridForShip(activeShip);
   const layout = layoutForShip(activeShip);
+  const hullCells = hullCellsForShip(activeShip);
 
   frame.className = "builder-grid-frame";
   frame.style.setProperty("--builder-cols", String(grid.columns));
@@ -916,7 +996,7 @@ function createShipGrid(activeShip, canBuild) {
 
   for (let y = 0; y < grid.rows; y += 1) {
     for (let x = 0; x < grid.columns; x += 1) {
-      cells.append(createBuilderCell(x, y, canBuild));
+      cells.append(createBuilderCell(x, y, canBuild, hullCells.has(`${x},${y}`)));
     }
   }
 
@@ -948,10 +1028,13 @@ function createShipGrid(activeShip, canBuild) {
   return frame;
 }
 
-function createBuilderCell(x, y, canBuild) {
+function createBuilderCell(x, y, canBuild, isHullCell) {
   const cell = document.createElement("button");
 
   cell.className = "builder-grid-cell";
+  if (isHullCell) {
+    cell.classList.add("is-hull");
+  }
   cell.type = "button";
   cell.disabled = !canBuild;
   cell.dataset.builderCell = `${x},${y}`;
@@ -1026,7 +1109,14 @@ function placeDroppedBuilderItem(dataTransferValue, x, y) {
   }
 
   if (dataTransferValue?.startsWith("part:")) {
-    placePartOnGrid(dataTransferValue.slice("part:".length), x, y);
+    const partId = dataTransferValue.slice("part:".length);
+
+    if (partId === METAL_OUTLINE_ID) {
+      buildHullCell(x, y);
+      return;
+    }
+
+    placePartOnGrid(partId, x, y);
     return;
   }
 
@@ -1036,6 +1126,11 @@ function placeDroppedBuilderItem(dataTransferValue, x, y) {
   }
 
   if (draggedBuilderPartId) {
+    if (draggedBuilderPartId === METAL_OUTLINE_ID) {
+      buildHullCell(x, y);
+      return;
+    }
+
     placePartOnGrid(draggedBuilderPartId, x, y);
   }
 }
@@ -1047,8 +1142,58 @@ function placeBuilderSelectionAt(x, y) {
   }
 
   if (selectedBuilderPartId) {
+    if (selectedBuilderPartId === METAL_OUTLINE_ID) {
+      buildHullCell(x, y);
+      return;
+    }
+
     placePartOnGrid(selectedBuilderPartId, x, y);
   }
+}
+
+function buildHullCell(x, y) {
+  const activeShip = activeShipFor();
+
+  if (!activeShip) {
+    return;
+  }
+
+  if (!isAtHomeworldSavePoint()) {
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  const grid = gridForShip(activeShip);
+
+  if (x < 0 || y < 0 || x >= grid.columns || y >= grid.rows) {
+    builderStatusText = "Metal does not fit there";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  const cellKey = `${x},${y}`;
+  activeShip.hullCells = Array.isArray(activeShip.hullCells) ? activeShip.hullCells : [];
+
+  if (activeShip.hullCells.includes(cellKey)) {
+    builderStatusText = "Metal already there";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  if ((saveData.resources.metal ?? 0) <= 0) {
+    builderStatusText = "Buy metal in Parts Bay";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  saveData.resources.metal -= 1;
+  activeShip.hullCells = [...activeShip.hullCells, cellKey];
+  selectedBuilderPartId = METAL_OUTLINE_ID;
+  selectedPlacedPartId = null;
+  Object.assign(saveData, saveGameData(saveData));
+  builderStatusText = `Added metal outline (${saveData.resources.metal} left)`;
+  renderPlaceholderScreens(saveData);
 }
 
 function placePartOnGrid(partId, x, y) {
@@ -1077,7 +1222,13 @@ function placePartOnGrid(partId, x, y) {
     ? { ...existingPlacement, x, y }
     : { id: `layout-${part.id}`, partId: part.id, x, y, rotation: 0 };
   const remainingLayout = layoutForShip(activeShip).filter((item) => item.id !== placement.id);
-  const placementProblem = placementProblemFor(placement, part, remainingLayout, grid);
+  const placementProblem = placementProblemFor(
+    placement,
+    part,
+    remainingLayout,
+    grid,
+    hullCellsForShip(activeShip),
+  );
 
   if (placementProblem) {
     builderStatusText = placementProblem;
@@ -1112,7 +1263,13 @@ function movePlacedPartToGrid(placedPartId, x, y) {
   const grid = gridForShip(activeShip);
   const movedPart = { ...placedPart, x, y };
   const remainingLayout = layoutForShip(activeShip).filter((item) => item.id !== placedPartId);
-  const placementProblem = placementProblemFor(movedPart, part, remainingLayout, grid);
+  const placementProblem = placementProblemFor(
+    movedPart,
+    part,
+    remainingLayout,
+    grid,
+    hullCellsForShip(activeShip),
+  );
 
   if (placementProblem) {
     builderStatusText = placementProblem;
@@ -1154,7 +1311,13 @@ function rotateSelectedPlacedPart() {
   const remainingLayout = layoutForShip(activeShip).filter((item) => {
     return item.id !== placedPart.id;
   });
-  const placementProblem = placementProblemFor(rotatedPart, part, remainingLayout, grid);
+  const placementProblem = placementProblemFor(
+    rotatedPart,
+    part,
+    remainingLayout,
+    grid,
+    hullCellsForShip(activeShip),
+  );
 
   if (placementProblem) {
     builderStatusText = `Cannot rotate: ${placementProblem}`;
@@ -1171,7 +1334,7 @@ function rotateSelectedPlacedPart() {
   renderPlaceholderScreens(saveData);
 }
 
-function placementProblemFor(placement, part, layout, grid) {
+function placementProblemFor(placement, part, layout, grid, hullCells = new Set()) {
   const size = rotatedPartSize(part, placement.rotation);
 
   if (
@@ -1184,6 +1347,12 @@ function placementProblemFor(placement, part, layout, grid) {
   }
 
   const proposedCells = occupiedCellsFor(placement, part);
+  const hasMetalOutline = proposedCells.every((cell) => hullCells.has(cell));
+
+  if (!hasMetalOutline) {
+    return `${part.name} needs metal outline`;
+  }
+
   const hasOverlap = layout.some((placedPart) => {
     const placedPartTemplate = partLabels[placedPart.partId];
 
@@ -1253,6 +1422,10 @@ function gridForShip(activeShip) {
 
 function layoutForShip(activeShip) {
   return Array.isArray(activeShip?.layout) ? activeShip.layout : [];
+}
+
+function hullCellsForShip(activeShip) {
+  return new Set(Array.isArray(activeShip?.hullCells) ? activeShip.hullCells : []);
 }
 
 function lifeSupportStatusFor(activeShip) {
@@ -1484,7 +1657,7 @@ function missionStatusFor(outcome, missionPlanet) {
   const statuses = {
     Preflight: lifeSupport.ok
       ? `Target: ${missionPlanet.name}, ${distance} away | ${lifeSupportStatusText}`
-      : lifeSupport.message,
+      : `Target: ${missionPlanet.name}, ${distance} away | ${lifeSupport.message}`,
     Launch: `Manual launch toward ${missionPlanet.name}`,
     Flight: `${missionPlanet.name} is ${distance} away`,
     Crash: `Mission to ${missionPlanet.name} failed`,

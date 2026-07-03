@@ -1,35 +1,14 @@
-export const SAVE_DATA_VERSION = 1;
-export const SAVE_STORAGE_KEY = "galaxy-exploration.save.v1";
-export const RESOURCE_TYPES = Object.freeze(["oil", "iron", "copper", "ice", "water"]);
+export const SAVE_DATA_VERSION = 2;
+export const SAVE_STORAGE_KEY = "galaxy-exploration.save.v2";
+export const RESOURCE_TYPES = Object.freeze(["metal", "oil", "iron", "copper", "ice", "water"]);
 
-export const STARTER_PART_IDS = Object.freeze([
-  "cmd-pioneer",
-  "air-maker-basic",
-  "water-tank-s",
-  "tank-kerolox-s",
-  "engine-swift-1",
-  "legs-light-quad",
-  "avionics-basic",
-  "heatshield-ablative",
-  "reaction-wheel-r2",
-  "science-bay-light",
-]);
+export const STARTER_PART_IDS = Object.freeze([]);
 export const STARTER_SHIP_GRID = Object.freeze({
   columns: 12,
   rows: 16,
 });
-export const STARTER_SHIP_LAYOUT = Object.freeze([
-  { id: "layout-reaction-wheel", partId: "reaction-wheel-r2", x: 3, y: 0 },
-  { id: "layout-command", partId: "cmd-pioneer", x: 5, y: 0 },
-  { id: "layout-heatshield", partId: "heatshield-ablative", x: 4, y: 2 },
-  { id: "layout-avionics", partId: "avionics-basic", x: 8, y: 2 },
-  { id: "layout-air-maker", partId: "air-maker-basic", x: 2, y: 3 },
-  { id: "layout-water", partId: "water-tank-s", x: 4, y: 3 },
-  { id: "layout-science", partId: "science-bay-light", x: 6, y: 3 },
-  { id: "layout-fuel", partId: "tank-kerolox-s", x: 3, y: 5 },
-  { id: "layout-engine", partId: "engine-swift-1", x: 6, y: 9 },
-  { id: "layout-landing", partId: "legs-light-quad", x: 4, y: 13 },
-]);
+export const STARTER_SHIP_LAYOUT = Object.freeze([]);
+export const STARTER_SHIP_HULL_CELLS = Object.freeze([]);
 
 export const STARTER_PLANET_IDS = Object.freeze([
   "homeworld",
@@ -43,6 +22,7 @@ export const STARTER_PLANET_IDS = Object.freeze([
   "aurelia",
 ]);
 export const STARTER_RESOURCES = Object.freeze({
+  metal: 0,
   oil: 0,
   iron: 0,
   copper: 0,
@@ -62,6 +42,7 @@ export function createDefaultSaveData() {
         id: "ship-pioneer-test-vehicle",
         name: "Pioneer Test Vehicle",
         grid: { ...STARTER_SHIP_GRID },
+        hullCells: [...STARTER_SHIP_HULL_CELLS],
         layout: cloneLayout(STARTER_SHIP_LAYOUT),
         partIds: STARTER_SHIP_LAYOUT.map((part) => part.partId),
         stats: {
@@ -213,6 +194,10 @@ function normalizeBuiltShips(value, fallback) {
           : `generated-ship-${index + 1}`,
       name: typeof ship.name === "string" && ship.name.length > 0 ? ship.name : "Unnamed Ship",
       grid: normalizeShipGrid(ship.grid, fallback[index]?.grid ?? STARTER_SHIP_GRID),
+      hullCells: normalizeHullCells(
+        ship.hullCells,
+        fallback[index]?.hullCells ?? STARTER_SHIP_HULL_CELLS,
+      ),
       layout: normalizeShipLayout(ship.layout, fallback[index]?.layout ?? STARTER_SHIP_LAYOUT),
       partIds: normalizeStringList(
         ship.partIds,
@@ -238,6 +223,7 @@ function cloneShip(ship) {
   return {
     ...ship,
     grid: { ...ship.grid },
+    hullCells: [...ship.hullCells],
     layout: cloneLayout(ship.layout),
     partIds: [...ship.partIds],
     stats: { ...ship.stats },
@@ -273,6 +259,32 @@ function normalizeShipLayout(value, fallback) {
     }));
 
   return normalizedLayout.length > 0 ? normalizedLayout : cloneLayout(fallback);
+}
+
+function normalizeHullCells(value, fallback) {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  const normalizedCells = value
+    .map((cell) => {
+      if (typeof cell === "string") {
+        const [x, y] = cell.split(",").map((position) => Number(position));
+
+        return Number.isFinite(x) && Number.isFinite(y)
+          ? `${Math.floor(x)},${Math.floor(y)}`
+          : null;
+      }
+
+      if (cell && typeof cell === "object") {
+        return `${normalizeGridPosition(cell.x)},${normalizeGridPosition(cell.y)}`;
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+
+  return [...new Set(normalizedCells)];
 }
 
 function normalizeGridPosition(value) {

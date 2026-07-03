@@ -10,9 +10,10 @@ A 2D JavaScript space exploration game prototype built with Vite, PixiJS, and a 
 - Physics model for thrust, fuel burn, gravity, atmosphere, drag, orbit, escape, landing, and crashes.
 - Discoverable planet map with mission targeting and Homeworld return flow.
 - Local save data for money, resources, unlocked parts, built ships, mission history, and save points.
-- Parts Bay and builder screens for placing ship parts that take up grid space.
+- Parts Bay and builder screens for buying metal, buying parts, and placing ship parts that take up grid space.
 - Buy new parts with credits, move placed parts on the grid, and press **R** to rotate the selected placed part.
-- Starter ship blueprint begins with the main parts already taking up graph-paper space.
+- Starter save begins with money, water, no owned parts, and an empty graph-paper ship.
+- Metal packs cost credits and create outline cells where bought parts can be installed.
 - Air Maker life support that consumes water when a launch begins and stops working when water runs out.
 - Unit tests for simulation and save-data behavior, plus Playwright coverage for core UI flows.
 
@@ -50,7 +51,9 @@ Open the local URL printed by Vite, usually `http://127.0.0.1:5173/`.
 - Use the left and right arrow keys, or the on-screen steering buttons, to rotate the ship.
 - Use **Reset** to return to the launch pad.
 - Switch between Launch, Parts, Builder, and Travel from the top navigation.
-- In Builder, select or drag owned parts onto the graph paper. Select a placed part and press **R** to rotate it.
+- In Parts Bay, buy metal packs and part templates with credits.
+- In Builder, select Metal Outline to spend metal on graph-paper cells, then select or drag owned parts into those cells.
+- Select a placed part and press **R** to rotate it.
 
 ## Scripts
 
@@ -81,4 +84,4 @@ public/assets/                    Static game assets
 
 ## Development Notes
 
-Save data is stored in `localStorage` under `galaxy-exploration.save.v1`. Clear that key in the browser if you need to reset progression while testing.
+Save data is stored in `localStorage` under `galaxy-exploration.save.v2`. Clear that key in the browser if you need to reset progression while testing.
