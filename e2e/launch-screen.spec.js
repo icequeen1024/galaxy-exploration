@@ -34,17 +34,6 @@ async function reloadReadyGame(page) {
   });
 }
 
-async function buyMetalPack(page, packs = 1) {
-  await page.getByRole("button", { name: "Parts" }).click();
-  const metalPack = page
-    .locator('[data-screen-panel="shop"]')
-    .locator('[data-part-id="metal-outline"]');
-
-  for (let pack = 0; pack < packs; pack += 1) {
-    await metalPack.getByRole("button", { name: "Buy" }).click();
-  }
-}
-
 async function buyPartTemplate(page, partId) {
   await page.getByRole("button", { name: "Parts" }).click();
   await page
@@ -52,18 +41,6 @@ async function buyPartTemplate(page, partId) {
     .locator(`[data-part-id="${partId}"]`)
     .getByRole("button", { name: "Buy" })
     .click();
-}
-
-function rectangleCells(startX, startY, width, height) {
-  const cells = [];
-
-  for (let y = startY; y < startY + height; y += 1) {
-    for (let x = startX; x < startX + width; x += 1) {
-      cells.push(`${x},${y}`);
-    }
-  }
-
-  return cells;
 }
 
 async function seedBuilderSave(page, { hullCells = [], resources = {}, unlockedParts = [] }) {
@@ -91,23 +68,9 @@ async function seedBuilderSave(page, { hullCells = [], resources = {}, unlockedP
   await reloadReadyGame(page);
 }
 
-async function buildMetalRectangle(page, startX, startY, width, height) {
-  const builder = page.locator('[data-screen-panel="builder"]');
-
-  await builder.locator('[data-builder-part="metal-outline"]').dispatchEvent("click");
-
-  for (let y = startY; y < startY + height; y += 1) {
-    for (let x = startX; x < startX + width; x += 1) {
-      await builder.locator(`[data-builder-cell="${x},${y}"]`).dispatchEvent("click");
-    }
-  }
-}
-
 async function prepareAirMaker(page, waterAmount) {
-  await buyMetalPack(page);
   await buyPartTemplate(page, "air-maker-basic");
   await page.getByRole("button", { name: "Builder" }).click();
-  await buildMetalRectangle(page, 2, 3, 2, 2);
   await page.locator('[data-builder-part="air-maker-basic"]').dispatchEvent("click");
   await page.locator('[data-builder-cell="2,3"]').dispatchEvent("click");
   await expect(page.locator("#builder-status")).toContainText("Placed Air Maker");
@@ -197,28 +160,52 @@ test("buys costly part templates from the Parts Bay", async ({ page }) => {
   expect(savedData.money).toBe(22000);
 });
 
-test("explains the exact metal area needed for a part footprint", async ({ page }) => {
+test("places a part before sealing it with metal lines", async ({ page }) => {
   test.setTimeout(60000);
   await openReadyGame(page);
   await seedBuilderSave(page, {
-    hullCells: rectangleCells(0, 0, 3, 3),
-    resources: { metal: 3 },
+    resources: { metal: 16 },
     unlockedParts: ["tank-kerolox-s"],
   });
 
   await page.getByRole("button", { name: "Builder" }).click();
   const builder = page.locator('[data-screen-panel="builder"]');
 
+  await builder.locator('[data-builder-part="metal-outline"]').dispatchEvent("click");
+  await builder.locator('[data-builder-cell="0,0"]').dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText("Place a part first");
   await builder.locator('[data-builder-part="tank-kerolox-s"]').dispatchEvent("click");
   await expect(page.locator("#builder-status")).toContainText(
-    "Kerolox Tank S: Needs a filled 2x4 metal area (8 cells).",
+    "Kerolox Tank S: Place first, then seal 8 blocks with 16 metal lines.",
+  );
+  await builder.locator('[data-builder-cell="0,0"]').dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText("Placed Kerolox Tank S");
+  await expect(builder.locator('[data-placed-part="tank-kerolox-s"]')).toContainText(
+    "0/16 metal lines sealed",
+  );
+  await builder.locator('[data-builder-part="metal-outline"]').dispatchEvent("click");
+  await builder.locator('[data-builder-cell="0,0"]').dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText(
+    "Added metal line (1/2 on this block, 15 left)",
   );
   await builder.locator('[data-builder-cell="0,0"]').dispatchEvent("click");
 
   await expect(page.locator("#builder-status")).toContainText(
-    "Kerolox Tank S needs a filled 2x4 metal area",
+    "Added metal line (2/2 on this block, 14 left)",
   );
-  await expect(builder.locator("[data-placed-part]")).toHaveCount(0);
+  await expect(builder.locator(".builder-metal-line.is-sealed")).toHaveCount(1);
+
+  const sealedSaveData = await page.evaluate(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
+  });
+  const sealedActiveShip = sealedSaveData.builtShips.find(
+    (ship) => ship.id === sealedSaveData.activeShipId,
+  );
+
+  expect(sealedSaveData.resources.metal).toBe(14);
+  expect(sealedActiveShip.hullCells).toEqual(
+    expect.arrayContaining(["0,0:a", "0,0:b"]),
+  );
 });
 
 test("places, moves, rotates, and unplaces part templates on the gridded ship graph", async ({
@@ -227,8 +214,7 @@ test("places, moves, rotates, and unplaces part templates on the gridded ship gr
   test.setTimeout(60000);
   await openReadyGame(page);
   await seedBuilderSave(page, {
-    hullCells: rectangleCells(0, 9, 4, 6),
-    resources: { metal: 0 },
+    resources: { metal: 1 },
     unlockedParts: ["tank-kerolox-m"],
   });
 
@@ -241,7 +227,6 @@ test("places, moves, rotates, and unplaces part templates on the gridded ship gr
   await expect(builder.locator(".builder-graph")).toBeVisible();
   await expect(builder.locator(".builder-grid-frame")).toBeVisible();
   await expect(builder.locator("[data-placed-part]")).toHaveCount(0);
-  await expect(builder.locator(".builder-grid-cell.is-hull")).toHaveCount(24);
   await expect(fuelPart).toContainText("Kerolox Tank M");
   await fuelPart.dispatchEvent("click");
   await openGridCell.dispatchEvent("click");
@@ -264,8 +249,8 @@ test("places, moves, rotates, and unplaces part templates on the gridded ship gr
     (ship) => ship.id === movedSaveData.activeShipId,
   );
 
-  expect(movedActiveShip.hullCells).toHaveLength(24);
-  expect(movedSaveData.resources.metal).toBe(0);
+  expect(movedActiveShip.hullCells).toHaveLength(0);
+  expect(movedSaveData.resources.metal).toBe(1);
   expect(movedActiveShip.layout).toContainEqual(
     expect.objectContaining({
       partId: "tank-kerolox-m",
@@ -298,14 +283,22 @@ test("places, moves, rotates, and unplaces part templates on the gridded ship gr
     }),
   );
 
+  await fuelPart.dispatchEvent("click");
+  await openGridCell.dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText("Placed Kerolox Tank M");
+  await builder.locator('[data-builder-part="metal-outline"]').dispatchEvent("click");
+  await builder.locator('[data-builder-cell="0,9"]').dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText(
+    "Added metal line (1/2 on this block, 0 left)",
+  );
   await page.keyboard.press("U");
   await expect(page.locator("#builder-status")).toContainText("Unplace ready");
   await builder.locator('[data-builder-cell="0,9"]').dispatchEvent("click");
 
   await expect(page.locator("#builder-status")).toContainText(
-    "Removed metal outline (1 metal ready)",
+    "Removed metal line (1 metal ready)",
   );
-  await expect(builder.locator(".builder-grid-cell.is-hull")).toHaveCount(23);
+  await expect(builder.locator(".builder-metal-line")).toHaveCount(0);
 
   const metalRemovedSaveData = await page.evaluate(() => {
     return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
@@ -315,7 +308,7 @@ test("places, moves, rotates, and unplaces part templates on the gridded ship gr
   );
 
   expect(metalRemovedSaveData.resources.metal).toBe(1);
-  expect(metalRemovedActiveShip.hullCells).not.toContain("0,9");
+  expect(metalRemovedActiveShip.hullCells).not.toContain("0,9:a");
 });
 
 test("scrolls through all part templates in the builder", async ({ page }) => {
@@ -457,7 +450,7 @@ test("switches between foundation screens", async ({ page }) => {
   await expect(builder.locator(".builder-grid-frame")).toBeVisible();
   await expect(builder.locator("[data-placed-part]")).toHaveCount(0);
   await expect(builder.locator('[data-builder-part="metal-outline"]')).toContainText(
-    "Metal Outline",
+    "Metal Line",
   );
   await expect(page.locator("#builder-status")).toContainText("Install an Air Maker");
 

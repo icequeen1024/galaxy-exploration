@@ -421,6 +421,7 @@ const REQUIRED_LIFE_SUPPORT_PART_ID = "air-maker-basic";
 const METAL_OUTLINE_ID = "metal-outline";
 const METAL_PACK_SIZE = 12;
 const METAL_PACK_COST = 1200;
+const METAL_PIECES_PER_CELL = 2;
 
 const planetLabels = {
   homeworld: {
@@ -837,7 +838,7 @@ function renderPlaceholderScreens(data) {
       partId: METAL_OUTLINE_ID,
       label: "Ship Outline",
       name: "Metal Pack",
-      detail: `${METAL_PACK_SIZE} metal cells | ${METAL_PACK_COST.toLocaleString()} credits. Use metal on the graph to make spaces where bought parts can be installed.`,
+      detail: `${METAL_PACK_SIZE} metal lines | ${METAL_PACK_COST.toLocaleString()} credits. Place parts first, then seal their graph cells with metal lines.`,
       buttonLabel: "Buy",
       buttonDisabled: !canShop || data.money < METAL_PACK_COST,
       buttonTitle: partsBayButtonTitle(false, canShop, data.money >= METAL_PACK_COST),
@@ -887,10 +888,10 @@ function renderBuilder(activeShip) {
     .filter(Boolean);
   const lifeSupport = lifeSupportStatusFor(activeShip);
   const metalAmount = saveData.resources.metal ?? 0;
-  const outlineCells = hullCellsForShip(activeShip).size;
+  const metalLines = metalPiecesForShip(activeShip).total;
   const statusText =
     builderStatusText === "Ready"
-      ? `${lifeSupport.message} | Metal ${metalAmount} | Outline ${outlineCells} cells | ${availableParts.length} owned parts`
+      ? `${lifeSupport.message} | Metal ${metalAmount} | Ship metal ${metalLines} lines | ${availableParts.length} owned parts`
       : builderStatusText;
 
   screenUi.builderStatus.textContent = canBuild ? statusText : "Return to Homeworld";
@@ -913,10 +914,10 @@ function createMetalOutlineItem(canBuild) {
   item.draggable = canBuild;
   item.dataset.builderPart = METAL_OUTLINE_ID;
   item.dataset.category = "Outline";
-  item.setAttribute("aria-label", "Metal Outline, one graph cell");
-  category.textContent = "Outline | 1 cell";
-  name.textContent = "Metal Outline";
-  detail.textContent = `${metalAmount} metal ready. Fill every cell under a part.`;
+  item.setAttribute("aria-label", "Metal Line, one seal line");
+  category.textContent = "Outline | 1 line";
+  name.textContent = "Metal Line";
+  detail.textContent = `${metalAmount} metal ready. Add 2 lines to seal one occupied block.`;
   item.append(category, name, detail);
 
   if (selectedBuilderPartId === METAL_OUTLINE_ID) {
@@ -927,7 +928,7 @@ function createMetalOutlineItem(canBuild) {
     selectedBuilderPartId = METAL_OUTLINE_ID;
     selectedPlacedPartId = null;
     unplacePartArmed = false;
-    builderStatusText = metalAmount > 0 ? "Metal Outline selected" : "Buy metal in Parts Bay";
+    builderStatusText = metalAmount > 0 ? "Metal Line selected" : "Buy metal in Parts Bay";
     renderPlaceholderScreens(saveData);
   });
   item.addEventListener("dragstart", (event) => {
@@ -994,9 +995,10 @@ function createShipGrid(activeShip, canBuild) {
   const ship = document.createElement("div");
   const cells = document.createElement("div");
   const parts = document.createElement("div");
+  const metal = document.createElement("div");
   const grid = gridForShip(activeShip);
   const layout = layoutForShip(activeShip);
-  const hullCells = hullCellsForShip(activeShip);
+  const metalPieces = metalPiecesForShip(activeShip);
 
   frame.className = "builder-grid-frame";
   frame.style.setProperty("--builder-cols", String(grid.columns));
@@ -1005,10 +1007,11 @@ function createShipGrid(activeShip, canBuild) {
   ship.className = "builder-ship-outline";
   cells.className = "builder-grid-cells";
   parts.className = "builder-grid-parts";
+  metal.className = "builder-grid-metal";
 
   for (let y = 0; y < grid.rows; y += 1) {
     for (let x = 0; x < grid.columns; x += 1) {
-      cells.append(createBuilderCell(x, y, canBuild, hullCells.has(`${x},${y}`)));
+      cells.append(createBuilderCell(x, y, canBuild, metalPieces.counts.get(`${x},${y}`) ?? 0));
     }
   }
 
@@ -1018,6 +1021,11 @@ function createShipGrid(activeShip, canBuild) {
     if (part) {
       parts.append(createPlacedGridPart(placedPart, part, canBuild));
     }
+  }
+
+  for (const [cellKey, pieceCount] of metalPieces.counts) {
+    const [x, y] = cellKey.split(",").map((position) => Number(position));
+    metal.append(createMetalGridLine(x, y, pieceCount));
   }
 
   frame.addEventListener("dragover", (event) => {
@@ -1035,19 +1043,19 @@ function createShipGrid(activeShip, canBuild) {
     const cell = cellFromPointer(event, frame, grid);
     placeDroppedBuilderItem(event.dataTransfer.getData("text/plain"), cell.x, cell.y);
   });
-  frame.append(paper, ship, cells, parts);
+  frame.append(paper, ship, cells, parts, metal);
 
   return frame;
 }
 
-function createBuilderCell(x, y, canBuild, isHullCell) {
+function createBuilderCell(x, y, canBuild, metalPieceCount) {
   const cell = document.createElement("button");
 
   cell.className = "builder-grid-cell";
-  if (isHullCell) {
-    cell.classList.add("is-hull");
+  if (metalPieceCount > 0) {
+    cell.classList.add("has-metal");
   }
-  if (isHullCell && unplacePartArmed) {
+  if (metalPieceCount > 0 && unplacePartArmed) {
     cell.classList.add("is-unplace-target");
   }
   cell.type = "button";
@@ -1061,6 +1069,18 @@ function createBuilderCell(x, y, canBuild, isHullCell) {
   });
 
   return cell;
+}
+
+function createMetalGridLine(x, y, pieceCount) {
+  const line = document.createElement("div");
+
+  line.className = "builder-metal-line";
+  line.classList.add(pieceCount >= METAL_PIECES_PER_CELL ? "is-sealed" : "is-half-sealed");
+  line.style.setProperty("--metal-x", x);
+  line.style.setProperty("--metal-y", y);
+  line.setAttribute("aria-hidden", "true");
+
+  return line;
 }
 
 function createPlacedGridPart(placedPart, part, canBuild) {
@@ -1084,8 +1104,7 @@ function createPlacedGridPart(placedPart, part, canBuild) {
   node.setAttribute("aria-label", `${part.name}, placed on grid`);
   category.textContent = `${part.category} | ${formatPartFootprint(part, placedPart.rotation)}`;
   name.textContent = part.name;
-  detail.textContent =
-    part.id === REQUIRED_LIFE_SUPPORT_PART_ID ? `Uses ${part.waterUse} water` : part.detail;
+  detail.textContent = placedPartSealText(placedPart, part);
   node.append(category, name, detail);
 
   if (placedPart.id === selectedPlacedPartId) {
@@ -1100,9 +1119,21 @@ function createPlacedGridPart(placedPart, part, canBuild) {
     node.classList.add("is-compact");
   }
 
-  node.addEventListener("click", () => {
+  node.addEventListener("click", (event) => {
+    const pointedCell = cellFromPlacedPartPointer(event, placedPart, part);
+
     if (unplacePartArmed) {
+      if (pointedCell && metalPieceCountForCell(activeShipFor(), pointedCell.x, pointedCell.y) > 0) {
+        unplaceHullCell(pointedCell.x, pointedCell.y);
+        return;
+      }
+
       unplacePlacedPart(placedPart.id);
+      return;
+    }
+
+    if (selectedBuilderPartId === METAL_OUTLINE_ID && pointedCell) {
+      buildHullCell(pointedCell.x, pointedCell.y);
       return;
     }
 
@@ -1204,8 +1235,18 @@ function buildHullCell(x, y) {
   const cellKey = `${x},${y}`;
   activeShip.hullCells = Array.isArray(activeShip.hullCells) ? activeShip.hullCells : [];
 
-  if (activeShip.hullCells.includes(cellKey)) {
-    builderStatusText = "Metal already there";
+  const placedPart = placedPartAtCell(activeShip, cellKey);
+
+  if (!placedPart) {
+    builderStatusText = "Place a part first";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  const metalPieceCount = metalPieceCountForCell(activeShip, x, y);
+
+  if (metalPieceCount >= METAL_PIECES_PER_CELL) {
+    builderStatusText = "That block is already sealed";
     renderPlaceholderScreens(saveData);
     return;
   }
@@ -1217,12 +1258,12 @@ function buildHullCell(x, y) {
   }
 
   saveData.resources.metal -= 1;
-  activeShip.hullCells = [...activeShip.hullCells, cellKey];
+  activeShip.hullCells = [...activeShip.hullCells, metalPieceKeyForCell(activeShip, cellKey)];
   selectedBuilderPartId = METAL_OUTLINE_ID;
   selectedPlacedPartId = null;
   unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
-  builderStatusText = `Added metal outline (${saveData.resources.metal} left)`;
+  builderStatusText = `Added metal line (${metalPieceCount + 1}/${METAL_PIECES_PER_CELL} on this block, ${saveData.resources.metal} left)`;
   renderPlaceholderScreens(saveData);
 }
 
@@ -1258,31 +1299,19 @@ function unplaceHullCell(x, y) {
   const cellKey = `${x},${y}`;
   activeShip.hullCells = Array.isArray(activeShip.hullCells) ? activeShip.hullCells : [];
 
-  if (!activeShip.hullCells.includes(cellKey)) {
+  if (metalPieceCountForCell(activeShip, x, y) <= 0) {
     builderStatusText = "No metal there";
     renderPlaceholderScreens(saveData);
     return;
   }
 
-  const coveredByPart = layoutForShip(activeShip).some((placedPart) => {
-    const part = partLabels[placedPart.partId];
-
-    return part && occupiedCellsFor(placedPart, part).includes(cellKey);
-  });
-
-  if (coveredByPart) {
-    builderStatusText = "Remove the part first";
-    renderPlaceholderScreens(saveData);
-    return;
-  }
-
-  activeShip.hullCells = activeShip.hullCells.filter((hullCell) => hullCell !== cellKey);
+  activeShip.hullCells = removeMetalPieceFromCell(activeShip.hullCells, cellKey);
   saveData.resources.metal = (saveData.resources.metal ?? 0) + 1;
   selectedBuilderPartId = METAL_OUTLINE_ID;
   selectedPlacedPartId = null;
   unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
-  builderStatusText = `Removed metal outline (${saveData.resources.metal} metal ready)`;
+  builderStatusText = `Removed metal line (${saveData.resources.metal} metal ready)`;
   renderPlaceholderScreens(saveData);
 }
 
@@ -1338,13 +1367,7 @@ function placePartOnGrid(partId, x, y) {
     ? { ...existingPlacement, x, y }
     : { id: `layout-${part.id}`, partId: part.id, x, y, rotation: 0 };
   const remainingLayout = layoutForShip(activeShip).filter((item) => item.id !== placement.id);
-  const placementProblem = placementProblemFor(
-    placement,
-    part,
-    remainingLayout,
-    grid,
-    hullCellsForShip(activeShip),
-  );
+  const placementProblem = placementProblemFor(placement, part, remainingLayout, grid);
 
   if (placementProblem) {
     builderStatusText = placementProblem;
@@ -1380,13 +1403,7 @@ function movePlacedPartToGrid(placedPartId, x, y) {
   const grid = gridForShip(activeShip);
   const movedPart = { ...placedPart, x, y };
   const remainingLayout = layoutForShip(activeShip).filter((item) => item.id !== placedPartId);
-  const placementProblem = placementProblemFor(
-    movedPart,
-    part,
-    remainingLayout,
-    grid,
-    hullCellsForShip(activeShip),
-  );
+  const placementProblem = placementProblemFor(movedPart, part, remainingLayout, grid);
 
   if (placementProblem) {
     builderStatusText = placementProblem;
@@ -1429,13 +1446,7 @@ function rotateSelectedPlacedPart() {
   const remainingLayout = layoutForShip(activeShip).filter((item) => {
     return item.id !== placedPart.id;
   });
-  const placementProblem = placementProblemFor(
-    rotatedPart,
-    part,
-    remainingLayout,
-    grid,
-    hullCellsForShip(activeShip),
-  );
+  const placementProblem = placementProblemFor(rotatedPart, part, remainingLayout, grid);
 
   if (placementProblem) {
     builderStatusText = `Cannot rotate: ${placementProblem}`;
@@ -1453,7 +1464,7 @@ function rotateSelectedPlacedPart() {
   renderPlaceholderScreens(saveData);
 }
 
-function placementProblemFor(placement, part, layout, grid, hullCells = new Set()) {
+function placementProblemFor(placement, part, layout, grid) {
   const size = rotatedPartSize(part, placement.rotation);
 
   if (
@@ -1466,11 +1477,6 @@ function placementProblemFor(placement, part, layout, grid, hullCells = new Set(
   }
 
   const proposedCells = occupiedCellsFor(placement, part);
-  const hasMetalOutline = proposedCells.every((cell) => hullCells.has(cell));
-
-  if (!hasMetalOutline) {
-    return `${part.name} needs a filled ${formatPartFootprint(part, placement.rotation)} metal area`;
-  }
 
   const hasOverlap = layout.some((placedPart) => {
     const placedPartTemplate = partLabels[placedPart.partId];
@@ -1535,6 +1541,26 @@ function cellFromPointer(event, frame, grid) {
   return { x, y };
 }
 
+function cellFromPlacedPartPointer(event, placedPart, part) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const size = rotatedPartSize(part, placedPart.rotation);
+  const x = clampNumber(
+    Math.floor(((event.clientX - rect.left) / rect.width) * size.width),
+    0,
+    size.width - 1,
+  );
+  const y = clampNumber(
+    Math.floor(((event.clientY - rect.top) / rect.height) * size.height),
+    0,
+    size.height - 1,
+  );
+
+  return {
+    x: placedPart.x + x,
+    y: placedPart.y + y,
+  };
+}
+
 function gridForShip(activeShip) {
   return activeShip?.grid ?? { columns: BUILDER_GRID_COLUMNS, rows: BUILDER_GRID_ROWS };
 }
@@ -1543,8 +1569,72 @@ function layoutForShip(activeShip) {
   return Array.isArray(activeShip?.layout) ? activeShip.layout : [];
 }
 
-function hullCellsForShip(activeShip) {
-  return new Set(Array.isArray(activeShip?.hullCells) ? activeShip.hullCells : []);
+function metalPiecesForShip(activeShip) {
+  const counts = new Map();
+  let total = 0;
+
+  for (const metalPiece of Array.isArray(activeShip?.hullCells) ? activeShip.hullCells : []) {
+    const cellKey = metalCellKeyFromPiece(metalPiece);
+
+    if (cellKey) {
+      const value = metalPiece.includes(":") ? 1 : METAL_PIECES_PER_CELL;
+      const nextValue = Math.min(
+        METAL_PIECES_PER_CELL,
+        (counts.get(cellKey) ?? 0) + value,
+      );
+      counts.set(cellKey, nextValue);
+    }
+  }
+
+  for (const count of counts.values()) {
+    total += count;
+  }
+
+  return { counts, total };
+}
+
+function metalCellKeyFromPiece(metalPiece) {
+  if (typeof metalPiece !== "string") {
+    return "";
+  }
+
+  const match = metalPiece.match(/^(\d+),(\d+)(?::[ab])?$/);
+
+  return match ? `${match[1]},${match[2]}` : "";
+}
+
+function metalPieceCountForCell(activeShip, x, y) {
+  return metalPiecesForShip(activeShip).counts.get(`${x},${y}`) ?? 0;
+}
+
+function metalPieceKeyForCell(activeShip, cellKey) {
+  const existingPieces = new Set(Array.isArray(activeShip?.hullCells) ? activeShip.hullCells : []);
+
+  return existingPieces.has(`${cellKey}:a`) ? `${cellKey}:b` : `${cellKey}:a`;
+}
+
+function removeMetalPieceFromCell(hullCells, cellKey) {
+  if (hullCells.includes(`${cellKey}:b`)) {
+    return hullCells.filter((hullCell) => hullCell !== `${cellKey}:b`);
+  }
+
+  if (hullCells.includes(`${cellKey}:a`)) {
+    return hullCells.filter((hullCell) => hullCell !== `${cellKey}:a`);
+  }
+
+  if (hullCells.includes(cellKey)) {
+    return hullCells.flatMap((hullCell) => (hullCell === cellKey ? [`${cellKey}:a`] : hullCell));
+  }
+
+  return hullCells;
+}
+
+function placedPartAtCell(activeShip, cellKey) {
+  return layoutForShip(activeShip).find((placedPart) => {
+    const part = partLabels[placedPart.partId];
+
+    return part && occupiedCellsFor(placedPart, part).includes(cellKey);
+  });
 }
 
 function lifeSupportStatusFor(activeShip) {
@@ -2473,8 +2563,21 @@ function formatPartFootprint(part, rotation = 0) {
 function metalRequirementText(part, rotation = 0) {
   const size = rotatedPartSize(part, rotation);
   const cellCount = size.width * size.height;
+  const metalLineCount = cellCount * METAL_PIECES_PER_CELL;
 
-  return `Needs a filled ${size.width}x${size.height} metal area (${cellCount} cells).`;
+  return `Place first, then seal ${cellCount} blocks with ${metalLineCount} metal lines.`;
+}
+
+function placedPartSealText(placedPart, part) {
+  const activeShip = activeShipFor();
+  const metalPieces = metalPiecesForShip(activeShip);
+  const occupiedCells = occupiedCellsFor(placedPart, part);
+  const sealedLines = occupiedCells.reduce((total, cell) => {
+    return total + (metalPieces.counts.get(cell) ?? 0);
+  }, 0);
+  const requiredLines = occupiedCells.length * METAL_PIECES_PER_CELL;
+
+  return `${sealedLines}/${requiredLines} metal lines sealed`;
 }
 
 function formatResources(resources) {

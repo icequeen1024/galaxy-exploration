@@ -269,10 +269,18 @@ function normalizeHullCells(value, fallback) {
   const normalizedCells = value
     .map((cell) => {
       if (typeof cell === "string") {
-        const [x, y] = cell.split(",").map((position) => Number(position));
+        const match = cell.match(/^(-?\d+),(-?\d+)(?::([ab]))?$/);
+
+        if (!match) {
+          return null;
+        }
+
+        const x = Number(match[1]);
+        const y = Number(match[2]);
+        const piece = match[3];
 
         return Number.isFinite(x) && Number.isFinite(y)
-          ? `${Math.floor(x)},${Math.floor(y)}`
+          ? `${Math.floor(x)},${Math.floor(y)}${piece ? `:${piece}` : ""}`
           : null;
       }
 
