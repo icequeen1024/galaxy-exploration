@@ -225,45 +225,48 @@ test("buys paint and paints a placed ship part", async ({ page }) => {
   await openReadyGame(page);
   await seedBuilderSave(page, {
     unlockedParts: ["tank-kerolox-s"],
-    unlockedPaints: ["paint-brown"],
+    unlockedPaints: ["paint-green"],
   });
 
   await page.getByRole("button", { name: "Builder" }).click();
   const builder = page.locator('[data-screen-panel="builder"]');
   const tank = builder.locator('[data-builder-part="tank-kerolox-s"]');
-  const brownPaint = builder.locator('[data-builder-part="paint-brown"]');
+  const greenPaint = builder.locator('[data-builder-part="paint-green"]');
 
-  await expect(brownPaint).toContainText("Brown Paint");
+  await expect(greenPaint).toContainText("Green Paint");
   await tank.dispatchEvent("click");
   await builder.locator('[data-builder-cell="1,1"]').dispatchEvent("click");
   await expect(page.locator("#builder-status")).toContainText("Placed Kerolox Tank S");
 
   const placedTank = builder.locator('[data-placed-part="tank-kerolox-s"]');
   await expect(placedTank).toContainText("Factory Color");
-  await brownPaint.dispatchEvent("click");
-  await placedTank.dispatchEvent("click");
+  await greenPaint.dispatchEvent("click");
+  await expect(builder.getByLabel("Brush size")).toHaveValue("16");
+  await builder.getByLabel("Brush size").evaluate((input) => {
+    input.value = "8";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#builder-status")).toContainText("Green Paint brush 8% block");
+  await placedTank.click();
   await expect(page.locator("#builder-status")).toContainText(
-    "Painted Kerolox Tank S block brown",
+    "Painted Kerolox Tank S green brush",
   );
 
-  await expect(placedTank.locator(".builder-grid-part-paint-cell")).toHaveCount(1);
+  await expect(placedTank.locator(".builder-grid-part-paint-stroke")).toHaveCount(1);
   const savedData = await page.evaluate(() => {
     return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
   });
   const activeShip = savedData.builtShips.find(
     (ship) => ship.id === savedData.activeShipId,
   );
+  const paintedTank = activeShip.layout.find((part) => part.partId === "tank-kerolox-s");
 
-  expect(savedData.unlockedPaints).toContain("paint-brown");
-  expect(activeShip.layout).toContainEqual(
+  expect(savedData.unlockedPaints).toContain("paint-green");
+  expect(paintedTank.paintStrokes).toContainEqual(
     expect.objectContaining({
-      partId: "tank-kerolox-s",
-      paintCells: expect.objectContaining({
-        "0,0": expect.objectContaining({
-          paintId: "paint-brown",
-          color: "#6b3f25",
-        }),
-      }),
+      paintId: "paint-green",
+      color: "#397c65",
+      size: 0.08,
     }),
   );
 });
@@ -305,7 +308,7 @@ test("mixes peach paint and smears brush strokes across ship blocks", async ({ p
     5,
   );
   await expect(page.locator("#builder-status")).toContainText(
-    "Painted Orbital Tank XL block peach",
+    "Painted Orbital Tank XL peach brush",
   );
 
   await builder.locator('[data-builder-part="paint-black"]').dispatchEvent("click");
@@ -320,9 +323,11 @@ test("mixes peach paint and smears brush strokes across ship blocks", async ({ p
     5,
   );
   await expect(page.locator("#builder-status")).toContainText(
-    "Painted Orbital Tank XL block black",
+    "Painted Orbital Tank XL black brush",
   );
-  await expect(placedTank.locator(".builder-grid-part-paint-cell")).toHaveCount(8);
+
+  const strokeCount = await placedTank.locator(".builder-grid-part-paint-stroke").count();
+  expect(strokeCount).toBeGreaterThan(8);
 
   const savedData = await page.evaluate(() => {
     return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
@@ -331,22 +336,22 @@ test("mixes peach paint and smears brush strokes across ship blocks", async ({ p
     (ship) => ship.id === savedData.activeShipId,
   );
   const orbitalTank = activeShip.layout.find((part) => part.partId === "tank-orbital-xl");
+  const peachStrokes = orbitalTank.paintStrokes.filter(
+    (stroke) => stroke.paintId === "paint-peach",
+  );
+  const blackStrokes = orbitalTank.paintStrokes.filter(
+    (stroke) => stroke.paintId === "paint-black",
+  );
 
-  expect(orbitalTank.paintCells["0,0"]).toMatchObject({
-    paintId: "paint-peach",
+  expect(peachStrokes.length).toBeGreaterThan(8);
+  expect(blackStrokes.length).toBeGreaterThan(1);
+  expect(peachStrokes[0]).toMatchObject({
     color: "#f5b98b",
+    size: 0.16,
   });
-  expect(orbitalTank.paintCells["3,1"]).toMatchObject({
-    paintId: "paint-peach",
-    color: "#f5b98b",
-  });
-  expect(orbitalTank.paintCells["1,1"]).toMatchObject({
-    paintId: "paint-black",
+  expect(blackStrokes.at(-1)).toMatchObject({
     color: "#24262d",
-  });
-  expect(orbitalTank.paintCells["2,1"]).toMatchObject({
-    paintId: "paint-black",
-    color: "#24262d",
+    size: 0.16,
   });
 });
 
@@ -368,7 +373,7 @@ test("reset clears bought parts, paints, metal, and the builder", async ({ page 
   await builder.locator('[data-builder-part="paint-brown"]').dispatchEvent("click");
   await builder.locator('[data-placed-part="tank-kerolox-s"]').dispatchEvent("click");
   await expect(page.locator("#builder-status")).toContainText(
-    "Painted Kerolox Tank S block brown",
+    "Painted Kerolox Tank S brown brush",
   );
 
   await page.getByRole("button", { name: "Launch" }).click();

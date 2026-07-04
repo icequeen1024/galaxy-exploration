@@ -90,6 +90,16 @@ describe("save data", () => {
                   color: "#f5b98b",
                 },
               },
+              paintStrokes: [
+                {
+                  x: 0.44,
+                  y: 0.8,
+                  size: 0.08,
+                  paintId: "paint-green",
+                  name: "Green Paint",
+                  color: "#397c65",
+                },
+              ],
             },
           ],
         },
@@ -108,6 +118,16 @@ describe("save data", () => {
             color: "#f5b98b",
           },
         },
+        paintStrokes: [
+          {
+            x: 0.44,
+            y: 0.8,
+            size: 0.08,
+            paintId: "paint-green",
+            name: "Green Paint",
+            color: "#397c65",
+          },
+        ],
       }),
     );
   });

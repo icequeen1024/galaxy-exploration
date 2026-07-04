@@ -73,6 +73,8 @@ let selectedBuilderPartId = null;
 let selectedPlacedPartId = null;
 let draggedBuilderPartId = null;
 let draggedPlacedPartId = null;
+let paintBrushSize = 0.16;
+let activePaintStroke = null;
 let builderStatusText = "Ready";
 let lifeSupportStatusText = "Install an Air Maker";
 let lifeSupportWaterCharged = false;
@@ -498,6 +500,10 @@ const METAL_OUTLINE_ID = "metal-outline";
 const METAL_PACK_SIZE = 12;
 const METAL_PACK_COST = 1200;
 const METAL_PIECES_PER_CELL = 2;
+const PAINT_BRUSH_MIN_SIZE = 0.08;
+const PAINT_BRUSH_MAX_SIZE = 0.72;
+const PAINT_BRUSH_DEFAULT_SIZE = 0.16;
+const PAINT_STROKE_SPACING = 0.06;
 
 const planetLabels = {
   homeworld: {
@@ -627,6 +633,7 @@ function resetProgress() {
   selectedPlacedPartId = null;
   draggedBuilderPartId = null;
   draggedPlacedPartId = null;
+  activePaintStroke = null;
   builderStatusText = "Ready";
   unplacePartArmed = false;
   resetFlight();
@@ -1020,6 +1027,7 @@ function renderBuilder(activeShip) {
   const lifeSupport = lifeSupportStatusFor(activeShip);
   const metalAmount = saveData.resources.metal ?? 0;
   const metalLines = metalPiecesForShip(activeShip).total;
+  const paintBrush = paintBrushForSelection();
   const statusText =
     builderStatusText === "Ready"
       ? `${lifeSupport.message} | Metal ${metalAmount} | Ship metal ${metalLines} lines | ${availablePaints.length} paints | ${availableParts.length} owned parts`
@@ -1028,6 +1036,7 @@ function renderBuilder(activeShip) {
   screenUi.builderStatus.textContent = canBuild ? statusText : "Return to Homeworld";
   screenUi.builderShipParts.replaceChildren(
     createMetalOutlineItem(canBuild),
+    ...(paintBrush ? [createBrushSizeControl(paintBrush, canBuild)] : []),
     ...availablePaints.map((paint) => createBuilderPaintItem(paint, canBuild)),
     ...availableParts.map((part) => createBuilderPartItem(part, canBuild)),
   );
@@ -1123,6 +1132,40 @@ function createBuilderPaintItem(paint, canBuild) {
   });
 
   return item;
+}
+
+function createBrushSizeControl(paint, canBuild) {
+  const control = document.createElement("label");
+  const header = document.createElement("span");
+  const row = document.createElement("span");
+  const name = document.createElement("strong");
+  const value = document.createElement("small");
+  const input = document.createElement("input");
+
+  control.className = "builder-brush-control";
+  control.style.setProperty("--paint-color", paint.color);
+  header.textContent = "Paintbrush";
+  row.className = "builder-brush-row";
+  name.textContent = "Brush Size";
+  value.textContent = paintBrushSizeLabel();
+  input.type = "range";
+  input.min = String(Math.round(PAINT_BRUSH_MIN_SIZE * 100));
+  input.max = String(Math.round(PAINT_BRUSH_MAX_SIZE * 100));
+  input.step = "1";
+  input.value = String(Math.round(paintBrushSize * 100));
+  input.disabled = !canBuild;
+  input.setAttribute("aria-label", "Brush size");
+  input.addEventListener("input", () => {
+    paintBrushSize = normalizePaintBrushSize(Number(input.value) / 100);
+    value.textContent = paintBrushSizeLabel();
+    builderStatusText = `${paint.name} brush ${paintBrushSizeLabel()}`;
+    screenUi.builderStatus.textContent = builderStatusText;
+  });
+
+  row.append(name, value);
+  control.append(header, row, input);
+
+  return control;
 }
 
 function createBuilderPartItem(part, canBuild) {
@@ -1264,11 +1307,11 @@ function createMetalGridLine(x, y, pieceCount) {
   return line;
 }
 
-function createPaintCellsLayer(placedPart, part) {
+function createPaintLayer(placedPart, part) {
   const layer = document.createElement("div");
   const size = rotatedPartSize(part, placedPart.rotation);
 
-  layer.className = "builder-grid-part-paint-cells";
+  layer.className = "builder-grid-part-paint-layer";
   layer.style.setProperty("--paint-cell-cols", size.width);
   layer.style.setProperty("--paint-cell-rows", size.height);
   layer.setAttribute("aria-hidden", "true");
@@ -1277,14 +1320,20 @@ function createPaintCellsLayer(placedPart, part) {
     const [x, y] = cellKey.split(",").map((position) => Number(position));
 
     if (x >= 0 && y >= 0 && x < size.width && y < size.height) {
-      layer.append(createPaintCellNode(x, y, paint));
+      layer.append(createLegacyPaintCellNode(x, y, paint));
+    }
+  }
+
+  for (const stroke of paintStrokesForPlacedPart(placedPart)) {
+    if (stroke.x >= 0 && stroke.y >= 0 && stroke.x <= size.width && stroke.y <= size.height) {
+      layer.append(createPaintStrokeNode(stroke));
     }
   }
 
   return layer;
 }
 
-function createPaintCellNode(x, y, paint) {
+function createLegacyPaintCellNode(x, y, paint) {
   const cell = document.createElement("div");
 
   cell.className = "builder-grid-part-paint-cell";
@@ -1294,6 +1343,18 @@ function createPaintCellNode(x, y, paint) {
   cell.style.background = paint.color;
 
   return cell;
+}
+
+function createPaintStrokeNode(stroke) {
+  const mark = document.createElement("i");
+
+  mark.className = "builder-grid-part-paint-stroke";
+  mark.style.setProperty("--stroke-x", stroke.x);
+  mark.style.setProperty("--stroke-y", stroke.y);
+  mark.style.setProperty("--stroke-size", stroke.size);
+  mark.style.setProperty("--stroke-color", stroke.color);
+
+  return mark;
 }
 
 function createPlacedGridPart(placedPart, part, canBuild) {
@@ -1320,7 +1381,7 @@ function createPlacedGridPart(placedPart, part, canBuild) {
   category.textContent = `${part.category} | ${formatPartFootprint(part, placedPart.rotation)}`;
   name.textContent = part.name;
   detail.textContent = `${placedPartSealText(placedPart, part)} | ${placedPartPaintSummary(placedPart, paint)}`;
-  node.append(createPaintCellsLayer(placedPart, part), category, name, detail);
+  node.append(createPaintLayer(placedPart, part), category, name, detail);
 
   if (placedPart.id === selectedPlacedPartId) {
     node.classList.add("is-selected");
@@ -1357,7 +1418,7 @@ function createPlacedGridPart(placedPart, part, canBuild) {
     }
 
     if (paintBrushForSelection()) {
-      paintPlacedPartCellFromEvent(event, placedPart, part);
+      paintPlacedPartStrokeFromEvent(event, placedPart, part);
       return;
     }
 
@@ -1388,7 +1449,11 @@ function createPlacedGridPart(placedPart, part, canBuild) {
     } catch {
       // Synthetic pointer events in tests may not be captureable.
     }
-    paintPlacedPartCellFromEvent(event, placedPart, part, { render: false });
+    activePaintStroke = {
+      placedPartId: placedPart.id,
+      lastPoint: null,
+    };
+    paintPlacedPartStrokeFromEvent(event, placedPart, part, { render: false });
   });
   node.addEventListener("pointermove", (event) => {
     if (!paintBrushForSelection() || event.buttons !== 1) {
@@ -1396,10 +1461,11 @@ function createPlacedGridPart(placedPart, part, canBuild) {
     }
 
     event.preventDefault();
-    paintPlacedPartCellFromEvent(event, placedPart, part, { render: false });
+    paintPlacedPartStrokeFromEvent(event, placedPart, part, { render: false });
   });
   for (const eventName of ["pointerup", "pointercancel", "lostpointercapture"]) {
     node.addEventListener(eventName, () => {
+      activePaintStroke = null;
       if (paintBrushForSelection()) {
         renderPlaceholderScreens(saveData);
       }
@@ -1619,29 +1685,37 @@ function paintPlacedPartAtCell(paintId, x, y) {
     return;
   }
 
-  paintPlacedPartCell(placedPart.id, x - placedPart.x, y - placedPart.y, paintId);
+  paintPlacedPartStroke(
+    placedPart.id,
+    [{ x: x - placedPart.x + 0.5, y: y - placedPart.y + 0.5 }],
+    paintId,
+  );
 }
 
-function paintPlacedPartCellFromEvent(
+function paintPlacedPartStrokeFromEvent(
   event,
   placedPart,
   part,
   { render = true } = {},
 ) {
-  const localCell = localCellFromPlacedPartPointer(event, placedPart, part);
-  paintPlacedPartCell(placedPart.id, localCell.x, localCell.y, selectedBuilderPartId, {
+  const localPoint = localPaintPointFromPlacedPartPointer(event, placedPart, part);
+  const previousPoint =
+    activePaintStroke?.placedPartId === placedPart.id ? activePaintStroke.lastPoint : null;
+  const points = paintStrokePointsBetween(previousPoint, localPoint, paintBrushSize);
+  const strokes = paintPlacedPartStroke(placedPart.id, points, selectedBuilderPartId, {
     render,
   });
 
+  if (activePaintStroke?.placedPartId === placedPart.id) {
+    activePaintStroke.lastPoint = localPoint;
+  }
+
   if (!render) {
-    const paint = paintBrushForSelection();
-    if (paint) {
-      applyPaintCellToNode(event.currentTarget, localCell.x, localCell.y, part, placedPart, paint);
-    }
+    applyPaintStrokesToNode(event.currentTarget, strokes, part, placedPart);
   }
 }
 
-function paintPlacedPartCell(placedPartId, localX, localY, paintId, { render = true } = {}) {
+function paintPlacedPartStroke(placedPartId, points, paintId, { render = true } = {}) {
   const activeShip = activeShipFor();
   const paint = paintOptionForId(paintId);
   const placedPart = layoutForShip(activeShip).find((item) => item.id === placedPartId);
@@ -1649,40 +1723,43 @@ function paintPlacedPartCell(placedPartId, localX, localY, paintId, { render = t
   const size = part ? rotatedPartSize(part, placedPart.rotation) : { width: 0, height: 0 };
 
   if (!activeShip || !paint || !placedPart || !part) {
-    return;
+    return [];
   }
 
   if (!paintIsAvailable(paint.id)) {
     builderStatusText = "Buy that paint first";
     renderPlaceholderScreens(saveData);
-    return;
+    return [];
   }
 
   if (!isAtHomeworldSavePoint()) {
     builderStatusText = "Return to Homeworld";
     renderPlaceholderScreens(saveData);
-    return;
+    return [];
   }
 
-  if (localX < 0 || localY < 0 || localX >= size.width || localY >= size.height) {
+  const strokes = points
+    .map((point) => ({
+      x: clampPaintStrokePosition(point.x, size.width),
+      y: clampPaintStrokePosition(point.y, size.height),
+      size: paintBrushSize,
+      paintId: paint.id,
+      name: paint.name,
+      color: paint.color,
+    }))
+    .filter((stroke) => stroke.x >= 0 && stroke.y >= 0);
+
+  if (strokes.length === 0) {
     builderStatusText = "Paint goes on placed blocks";
     renderPlaceholderScreens(saveData);
-    return;
+    return [];
   }
 
-  const cellKey = `${localX},${localY}`;
   activeShip.layout = layoutForShip(activeShip).map((item) =>
     item.id === placedPartId
       ? {
           ...item,
-          paintCells: {
-            ...(item.paintCells ?? {}),
-            [cellKey]: {
-              paintId: paint.id,
-              name: paint.name,
-              color: paint.color,
-            },
-          },
+          paintStrokes: [...(item.paintStrokes ?? []), ...strokes].slice(-600),
         }
       : item,
   );
@@ -1690,11 +1767,13 @@ function paintPlacedPartCell(placedPartId, localX, localY, paintId, { render = t
   selectedPlacedPartId = placedPartId;
   unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
-  builderStatusText = `Painted ${part.name} block ${paint.shortName}`;
+  builderStatusText = `Painted ${part.name} ${paint.shortName} brush`;
 
   if (render) {
     renderPlaceholderScreens(saveData);
   }
+
+  return strokes;
 }
 
 function placePartOnGrid(partId, x, y) {
@@ -1923,6 +2002,37 @@ function localCellFromPlacedPartPointer(event, placedPart, part) {
   return { x, y };
 }
 
+function localPaintPointFromPlacedPartPointer(event, placedPart, part) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const size = rotatedPartSize(part, placedPart.rotation);
+  const x = clampNumber(((event.clientX - rect.left) / rect.width) * size.width, 0, size.width);
+  const y = clampNumber(((event.clientY - rect.top) / rect.height) * size.height, 0, size.height);
+
+  return {
+    x: roundPaintValue(x),
+    y: roundPaintValue(y),
+  };
+}
+
+function paintStrokePointsBetween(startPoint, endPoint, brushSize) {
+  if (!startPoint) {
+    return [endPoint];
+  }
+
+  const distance = Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y);
+  const step = Math.max(PAINT_STROKE_SPACING, brushSize * 0.45);
+  const segments = Math.max(1, Math.ceil(distance / step));
+
+  return Array.from({ length: segments }, (_, index) => {
+    const ratio = (index + 1) / segments;
+
+    return {
+      x: roundPaintValue(startPoint.x + (endPoint.x - startPoint.x) * ratio),
+      y: roundPaintValue(startPoint.y + (endPoint.y - startPoint.y) * ratio),
+    };
+  });
+}
+
 function gridForShip(activeShip) {
   return activeShip?.grid ?? { columns: BUILDER_GRID_COLUMNS, rows: BUILDER_GRID_ROWS };
 }
@@ -1953,6 +2063,18 @@ function paintBrushForSelection() {
   return paintOptionForId(selectedBuilderPartId);
 }
 
+function normalizePaintBrushSize(value) {
+  return clampNumber(
+    Number.isFinite(value) ? value : PAINT_BRUSH_DEFAULT_SIZE,
+    PAINT_BRUSH_MIN_SIZE,
+    PAINT_BRUSH_MAX_SIZE,
+  );
+}
+
+function paintBrushSizeLabel() {
+  return `${Math.round(paintBrushSize * 100)}% block`;
+}
+
 function paintForPlacedPart(placedPart, part = partLabels[placedPart?.partId]) {
   const paint = paintLabels[placedPart?.paintId];
 
@@ -1980,38 +2102,64 @@ function paintCellForPlacedPart(placedPart, localX, localY) {
   return paintCellsForPlacedPart(placedPart)[`${localX},${localY}`] ?? null;
 }
 
+function paintStrokesForPlacedPart(placedPart) {
+  if (!Array.isArray(placedPart?.paintStrokes)) {
+    return [];
+  }
+
+  return placedPart.paintStrokes.filter((stroke) => {
+    return (
+      Number.isFinite(stroke?.x) &&
+      Number.isFinite(stroke?.y) &&
+      Number.isFinite(stroke?.size) &&
+      typeof stroke?.color === "string" &&
+      /^#[0-9a-f]{6}$/i.test(stroke.color)
+    );
+  });
+}
+
 function placedPartPaintSummary(placedPart, basePaint) {
   const paintedCells = Object.values(paintCellsForPlacedPart(placedPart));
+  const paintStrokes = paintStrokesForPlacedPart(placedPart);
 
-  if (paintedCells.length === 0) {
+  if (paintedCells.length === 0 && paintStrokes.length === 0) {
     return basePaint.name;
   }
 
-  const names = [...new Set(paintedCells.map((paint) => paint.name).filter(Boolean))];
+  const names = [
+    ...new Set(
+      [...paintedCells, ...paintStrokes].map((paint) => paint.name).filter(Boolean),
+    ),
+  ];
 
   return names.length === 1 ? names[0] : `${names.length} paints`;
 }
 
-function applyPaintCellToNode(node, localX, localY, part, placedPart, paint) {
+function applyPaintStrokesToNode(node, strokes, part, placedPart) {
   const size = rotatedPartSize(part, placedPart.rotation);
-  let layer = node.querySelector(".builder-grid-part-paint-cells");
+  let layer = node.querySelector(".builder-grid-part-paint-layer");
 
   if (!layer) {
-    layer = createPaintCellsLayer(placedPart, part);
+    layer = createPaintLayer(placedPart, part);
     node.prepend(layer);
   }
 
   layer.style.setProperty("--paint-cell-cols", size.width);
   layer.style.setProperty("--paint-cell-rows", size.height);
 
-  let cell = layer.querySelector(`[data-paint-cell="${localX},${localY}"]`);
+  layer.append(...strokes.map((stroke) => createPaintStrokeNode(stroke)));
+}
 
-  if (!cell) {
-    cell = createPaintCellNode(localX, localY, paint);
-    layer.append(cell);
+function clampPaintStrokePosition(value, max) {
+  if (!Number.isFinite(value) || value < 0 || value > max) {
+    return -1;
   }
 
-  cell.style.background = paint.color;
+  return roundPaintValue(value);
+}
+
+function roundPaintValue(value) {
+  return Math.round(value * 1000) / 1000;
 }
 
 function metalPiecesForShip(activeShip) {
@@ -2986,6 +3134,15 @@ function drawActiveShipBody(target, activeShip) {
           )
           .fill({ color: shade, alpha: 0.2 });
       }
+    }
+
+    for (const stroke of paintStrokesForPlacedPart(placedPart)) {
+      const color = cssHexToNumber(stroke.color);
+      const radius = Math.max(1, stroke.size * cellSize * 0.5);
+      const centerX = x + stroke.x * cellSize;
+      const centerY = y + stroke.y * cellSize;
+
+      target.circle(centerX, centerY, radius).fill({ color, alpha: 0.94 });
     }
 
     target.rect(x, y, width, height).stroke({ color: 0x07111d, alpha: 0.78, width: 1.5 });

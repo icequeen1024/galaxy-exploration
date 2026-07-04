@@ -252,6 +252,7 @@ function normalizeShipLayout(value, fallback) {
     .filter((part) => part && typeof part === "object" && typeof part.partId === "string")
     .map((part, index) => {
       const paintCells = normalizePaintCells(part.paintCells);
+      const paintStrokes = normalizePaintStrokes(part.paintStrokes);
 
       return {
         id:
@@ -266,6 +267,7 @@ function normalizeShipLayout(value, fallback) {
           ? { paintId: part.paintId }
           : {}),
         ...(Object.keys(paintCells).length > 0 ? { paintCells } : {}),
+        ...(paintStrokes.length > 0 ? { paintStrokes } : {}),
       };
     });
 
@@ -328,6 +330,10 @@ function cloneLayout(layout) {
       clone.paintCells = normalizePaintCells(part.paintCells);
     }
 
+    if (Array.isArray(part.paintStrokes)) {
+      clone.paintStrokes = normalizePaintStrokes(part.paintStrokes);
+    }
+
     return clone;
   });
 }
@@ -371,4 +377,49 @@ function normalizePaintCells(value) {
       })
       .filter(Boolean),
   );
+}
+
+function normalizePaintStrokes(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((stroke) => {
+      const color =
+        typeof stroke?.color === "string" && /^#[0-9a-f]{6}$/i.test(stroke.color)
+          ? stroke.color.toLowerCase()
+          : "";
+
+      if (!color) {
+        return null;
+      }
+
+      return {
+        x: normalizePaintStrokePosition(stroke.x),
+        y: normalizePaintStrokePosition(stroke.y),
+        size: normalizePaintStrokeSize(stroke.size),
+        color,
+        ...(typeof stroke.paintId === "string" && stroke.paintId.length > 0
+          ? { paintId: stroke.paintId }
+          : {}),
+        ...(typeof stroke.name === "string" && stroke.name.length > 0
+          ? { name: stroke.name }
+          : {}),
+      };
+    })
+    .filter(Boolean)
+    .slice(-600);
+}
+
+function normalizePaintStrokePosition(value) {
+  return Number.isFinite(value) && value >= 0 ? Math.round(value * 1000) / 1000 : 0;
+}
+
+function normalizePaintStrokeSize(value) {
+  if (!Number.isFinite(value)) {
+    return 0.16;
+  }
+
+  return Math.min(1.5, Math.max(0.04, Math.round(value * 1000) / 1000));
 }
