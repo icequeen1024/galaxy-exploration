@@ -92,11 +92,13 @@ export function gravitationalParameter(body = HOMEWORLD) {
 
 export function createGravityBody(body) {
   const radius = body.radius ?? body.physicalRadius;
+  const collisionRadius = Math.max(radius, body.collisionRadius ?? radius);
 
   return {
     id: body.id ?? body.name,
     name: body.name,
     radius,
+    collisionRadius,
     surfaceGravity: body.surfaceGravity,
     atmosphereDensity: body.atmosphereDensity ?? 0,
     atmosphereScaleHeight: body.atmosphereScaleHeight ?? 1,
@@ -129,6 +131,13 @@ export function surfaceAltitudeAtPosition(position, body = homeworldGravityBody(
   const dy = position.y - body.position.y;
 
   return Math.hypot(dx, dy) - body.radius;
+}
+
+export function collisionAltitudeAtPosition(position, body = homeworldGravityBody()) {
+  const dx = position.x - body.position.x;
+  const dy = position.y - body.position.y;
+
+  return Math.hypot(dx, dy) - (body.collisionRadius ?? body.radius);
 }
 
 export function closestGravityBody(position, bodies) {
@@ -165,6 +174,71 @@ export function gravityVectorAtPosition(position, bodies) {
     },
     { x: 0, y: 0 },
   );
+}
+
+export function collisionImpactAlongSegment(start, end, body) {
+  const radius = body.collisionRadius ?? body.radius;
+  const startX = start.x - body.position.x;
+  const startY = start.y - body.position.y;
+  const endX = end.x - body.position.x;
+  const endY = end.y - body.position.y;
+  const pathX = endX - startX;
+  const pathY = endY - startY;
+  const pathLengthSquared = pathX * pathX + pathY * pathY;
+  const startDistance = Math.hypot(startX, startY);
+  const endDistance = Math.hypot(endX, endY);
+
+  if (pathLengthSquared <= 0) {
+    return null;
+  }
+
+  if (startDistance <= radius) {
+    return endDistance < startDistance
+      ? {
+          body,
+          point: { ...start },
+          radius,
+          t: 0,
+        }
+      : null;
+  }
+
+  const b = 2 * (startX * pathX + startY * pathY);
+  const c = startX * startX + startY * startY - radius * radius;
+  const discriminant = b * b - 4 * pathLengthSquared * c;
+
+  if (discriminant < 0) {
+    return null;
+  }
+
+  const root = Math.sqrt(discriminant);
+  const firstContact = (-b - root) / (2 * pathLengthSquared);
+
+  if (firstContact < 0 || firstContact > 1) {
+    return null;
+  }
+
+  return {
+    body,
+    point: {
+      x: start.x + (end.x - start.x) * firstContact,
+      y: start.y + (end.y - start.y) * firstContact,
+    },
+    radius,
+    t: firstContact,
+  };
+}
+
+function firstCollisionImpactAlongSegment(start, end, bodies) {
+  return bodies.reduce((firstImpact, body) => {
+    const impact = collisionImpactAlongSegment(start, end, body);
+
+    if (!impact || (firstImpact && impact.t >= firstImpact.t)) {
+      return firstImpact;
+    }
+
+    return impact;
+  }, null);
 }
 
 export function stepLaunch(
@@ -224,6 +298,11 @@ export function stepLaunch(
   next.altitude += next.velocity.y * dt;
 
   const updatedPosition = { x: next.downrange, y: next.altitude };
+  const collisionImpact = firstCollisionImpactAlongSegment(
+    position,
+    updatedPosition,
+    bodies,
+  );
   const updatedNearestBody = closestGravityBody(updatedPosition, bodies);
   const updatedSurfaceAltitude = surfaceAltitudeAtPosition(
     updatedPosition,
@@ -236,8 +315,11 @@ export function stepLaunch(
   const updatedSpeed = Math.hypot(next.velocity.x, next.velocity.y);
   const orbitalSpeed = orbitalSpeedAtAltitude(updatedSurfaceAltitude, updatedNearestBody);
   const escapeSpeed = escapeSpeedAtAltitude(updatedSurfaceAltitude, updatedNearestBody);
-  const impactVectorX = updatedPosition.x - updatedNearestBody.position.x;
-  const impactVectorY = updatedPosition.y - updatedNearestBody.position.y;
+  const impactBody = collisionImpact?.body ?? updatedNearestBody;
+  const impactPosition = collisionImpact?.point ?? updatedPosition;
+  const impactRadius = collisionImpact?.radius ?? impactBody.radius;
+  const impactVectorX = impactPosition.x - impactBody.position.x;
+  const impactVectorY = impactPosition.y - impactBody.position.y;
   const impactDistance = Math.hypot(impactVectorX, impactVectorY);
   const surfaceNormalX = impactDistance > 0 ? impactVectorX / impactDistance : 0;
   const surfaceNormalY = impactDistance > 0 ? impactVectorY / impactDistance : 1;
@@ -258,25 +340,25 @@ export function stepLaunch(
     ),
   );
 
-  if (updatedSurfaceAltitude <= 0 && next.elapsed > 1.5) {
-    const surfaceRatio = updatedNearestBody.radius / Math.max(impactDistance, 1);
+  if ((collisionImpact || updatedSurfaceAltitude <= 0) && next.elapsed > 1.5) {
+    const surfaceRatio = impactRadius / Math.max(impactDistance, 1);
     const inwardSpeed = Math.max(0, -radialVelocity);
     const isSafeLanding =
       inwardSpeed <= LANDING_LIMITS.maxInwardSpeed &&
       tangentialSpeed <= LANDING_LIMITS.maxSidewaysSpeed &&
       landingAngle <= LANDING_LIMITS.maxAngleRadians;
 
-    next.downrange = updatedNearestBody.position.x + impactVectorX * surfaceRatio;
-    next.altitude = updatedNearestBody.position.y + impactVectorY * surfaceRatio;
+    next.downrange = impactBody.position.x + impactVectorX * surfaceRatio;
+    next.altitude = impactBody.position.y + impactVectorY * surfaceRatio;
     next.surfaceAltitude = 0;
     next.velocity.x = 0;
     next.velocity.y = 0;
-    next.gravitySource = updatedNearestBody.name;
+    next.gravitySource = impactBody.name;
 
     if (isSafeLanding) {
       next.phase = "landed";
       next.crashFuelMass = 0;
-      next.landedBody = updatedNearestBody.name;
+      next.landedBody = impactBody.name;
       next.outcome = "Landed";
     } else {
       next.phase = "crashed";

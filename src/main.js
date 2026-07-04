@@ -80,6 +80,7 @@ let unplacePartArmed = false;
 const ROCKET_VISUAL_SCALE = 0.32;
 const ROCKET_SURFACE_OFFSET = 26;
 const HOMEWORLD_VIEW_SCALE = 0.0072;
+const SHIP_CONTACT_RADIUS = ROCKET_SURFACE_OFFSET / HOMEWORLD_VIEW_SCALE;
 const MINIMAP_MARGIN = 16;
 const HOMEWORLD_RETURN_TARGET_ALTITUDE = 500;
 
@@ -230,6 +231,7 @@ const GRAVITY_BODIES = [
     id: "homeworld",
     name: HOMEWORLD.name,
     radius: HOMEWORLD.radius,
+    collisionRadius: HOMEWORLD.radius + SHIP_CONTACT_RADIUS,
     surfaceGravity: HOMEWORLD.surfaceGravity,
     atmosphereDensity: HOMEWORLD.atmosphereDensity,
     atmosphereScaleHeight: HOMEWORLD.atmosphereScaleHeight,
@@ -241,6 +243,7 @@ const GRAVITY_BODIES = [
     id: planet.id,
     name: planet.name,
     radius: planet.physicalRadius,
+    collisionRadius: planet.physicalRadius + SHIP_CONTACT_RADIUS,
     surfaceGravity: planet.surfaceGravity,
     atmosphereDensity: planet.atmosphereDensity ?? 0,
     atmosphereScaleHeight: planet.atmosphereScaleHeight ?? 1,

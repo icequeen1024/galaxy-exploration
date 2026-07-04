@@ -133,6 +133,78 @@ describe("launch physics", () => {
     expect(next.crashFuelMass).toBeGreaterThan(0);
   });
 
+  it("hits a planet even when a fast frame crosses through its hitbox", () => {
+    const tinyWorld = {
+      id: "tiny-world",
+      name: "Tiny World",
+      radius: 1000,
+      collisionRadius: 1200,
+      surfaceGravity: 0,
+      worldX: 0,
+      worldY: 0,
+    };
+    const state = {
+      ...createLaunchState(),
+      launched: true,
+      elapsed: 3,
+      downrange: -1500,
+      altitude: 0,
+      surfaceAltitude: 500,
+      maxAltitude: 500,
+      fuelMass: 1200,
+      gravitySource: tinyWorld.name,
+      velocity: { x: 4000, y: 0 },
+    };
+    const next = stepLaunch(
+      state,
+      { throttle: 0 },
+      1,
+      STARTER_SHIP,
+      HOMEWORLD,
+      [tinyWorld],
+    );
+
+    expect(next.outcome).toBe("Crash");
+    expect(next.gravitySource).toBe("Tiny World");
+    expect(next.downrange).toBeCloseTo(-1200, 5);
+    expect(next.surfaceAltitude).toBe(0);
+  });
+
+  it("uses the visual contact radius before the physical surface", () => {
+    const contactWorld = {
+      id: "contact-world",
+      name: "Contact World",
+      radius: 1000,
+      collisionRadius: 1250,
+      surfaceGravity: 0,
+      worldX: 0,
+      worldY: 0,
+    };
+    const state = {
+      ...createLaunchState(),
+      launched: true,
+      elapsed: 3,
+      downrange: -1300,
+      altitude: 0,
+      surfaceAltitude: 300,
+      maxAltitude: 300,
+      fuelMass: 1200,
+      gravitySource: contactWorld.name,
+      velocity: { x: 100, y: 0 },
+    };
+    const next = stepLaunch(
+      state,
+      { throttle: 0 },
+      1,
+      STARTER_SHIP,
+      HOMEWORLD,
+      [contactWorld],
+    );
+
+    expect(next.outcome).toBe("Crash");
+    expect(next.downrange).toBeCloseTo(-1250, 5);
+  });
+
   it("lands when the ship touches down slowly and upright", () => {
     const landingWorld = {
       id: "soft-world",
