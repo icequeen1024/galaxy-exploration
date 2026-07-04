@@ -243,6 +243,56 @@ test("buys paint and paints a placed ship part", async ({ page }) => {
   );
 });
 
+test("reset clears bought parts, paints, metal, and the builder", async ({ page }) => {
+  test.setTimeout(60000);
+  await openReadyGame(page);
+  await seedBuilderSave(page, {
+    resources: { metal: 6 },
+    unlockedParts: ["tank-kerolox-s"],
+    unlockedPaints: ["paint-brown"],
+  });
+
+  await page.getByRole("button", { name: "Builder" }).click();
+  const builder = page.locator('[data-screen-panel="builder"]');
+
+  await builder.locator('[data-builder-part="tank-kerolox-s"]').dispatchEvent("click");
+  await builder.locator('[data-builder-cell="1,1"]').dispatchEvent("click");
+  await expect(builder.locator("[data-placed-part]")).toHaveCount(1);
+  await builder.locator('[data-builder-part="paint-brown"]').dispatchEvent("click");
+  await builder.locator('[data-placed-part="tank-kerolox-s"]').dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText(
+    "Painted Kerolox Tank S brown",
+  );
+
+  await page.getByRole("button", { name: "Launch" }).click();
+  await page.getByRole("button", { name: "Reset" }).dispatchEvent("click");
+
+  const resetSaveData = await page.evaluate(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
+  });
+  const resetActiveShip = resetSaveData.builtShips.find(
+    (ship) => ship.id === resetSaveData.activeShipId,
+  );
+
+  expect(resetSaveData.money).toBe(25000);
+  expect(resetSaveData.resources.metal).toBe(0);
+  expect(resetSaveData.resources.water).toBe(25);
+  expect(resetSaveData.unlockedParts).toEqual([]);
+  expect(resetSaveData.unlockedPaints).toEqual([]);
+  expect(resetActiveShip.hullCells).toEqual([]);
+  expect(resetActiveShip.layout).toEqual([]);
+
+  await page.getByRole("button", { name: "Parts" }).click();
+  await expect(page.locator("#shop-money")).toContainText(
+    "25,000 credits | Metal 0 | Paints 0",
+  );
+
+  await page.getByRole("button", { name: "Builder" }).click();
+  await expect(builder.locator("[data-placed-part]")).toHaveCount(0);
+  await expect(builder.locator('[data-builder-part="tank-kerolox-s"]')).toHaveCount(0);
+  await expect(page.locator("#builder-status")).toContainText("Install an Air Maker");
+});
+
 test("places a part before sealing it with metal lines", async ({ page }) => {
   test.setTimeout(60000);
   await openReadyGame(page);
@@ -484,7 +534,7 @@ test("air maker consumes water and blocks launch when water is gone", async ({ p
     return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2")).resources.water === 0;
   });
 
-  await page.getByRole("button", { name: "Reset" }).dispatchEvent("click");
+  await reloadReadyGame(page);
   await page.getByTestId("hud").getByRole("button", { name: "Launch" }).dispatchEvent("click");
 
   await expect(page.locator("#mission-status")).toContainText("Air Maker needs water");

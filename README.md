@@ -50,7 +50,7 @@ Open the local URL printed by Vite, usually `http://127.0.0.1:5173/`.
 - Use the throttle slider to set engine power.
 - Press **Launch** or the spacebar to lift off.
 - Use the left and right arrow keys, or the on-screen steering buttons, to rotate the ship.
-- Use **Reset** to return to the launch pad.
+- Use **Reset** to start over with the blank starter save, clearing bought parts, paints, metal, and the builder.
 - Switch between Launch, Parts, Builder, and Travel from the top navigation.
 - In Parts Bay, buy metal packs, paint colors, and part templates with credits.
 - In Builder, place a part first, then select Metal Line and click cells on the part to seal them.

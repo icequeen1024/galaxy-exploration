@@ -3,6 +3,7 @@ import "./styles.css";
 import {
   RESOURCE_TYPES,
   STARTER_SHIP_GRID,
+  createDefaultSaveData,
   loadSaveData,
   saveGameData,
 } from "./data/saveData.js";
@@ -589,7 +590,7 @@ setupMissionTargetPicker();
 setupScreenNavigation();
 switchScreen("launch");
 
-function reset() {
+function resetFlight() {
   state = createLaunchState();
   launchRequested = false;
   lifeSupportWaterCharged = false;
@@ -601,13 +602,27 @@ function reset() {
   renderPlaceholderScreens(saveData);
 }
 
+function resetProgress() {
+  Object.assign(saveData, saveGameData(createDefaultSaveData()));
+  activeMissionPlanetId = normalizeMissionPlanetId(saveData.activeMissionPlanetId);
+  missionTargetOptionSignature = "";
+  savePointStatus = "Progress reset";
+  selectedBuilderPartId = null;
+  selectedPlacedPartId = null;
+  draggedBuilderPartId = null;
+  draggedPlacedPartId = null;
+  builderStatusText = "Ready";
+  unplacePartArmed = false;
+  resetFlight();
+}
+
 hud.launchButton.addEventListener("click", () => {
   requestLaunch();
 });
 
-hud.resetButton.addEventListener("click", reset);
+hud.resetButton.addEventListener("click", resetProgress);
 hud.saveButton.addEventListener("click", saveAtHomeworld);
-resultUi.retryButton.addEventListener("click", reset);
+resultUi.retryButton.addEventListener("click", resetFlight);
 bindSteerButton(hud.steerLeft, "ArrowLeft");
 bindSteerButton(hud.steerRight, "ArrowRight");
 
