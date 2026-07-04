@@ -52,7 +52,8 @@ Open the local URL printed by Vite, usually `http://127.0.0.1:5173/`.
 - Use **Reset** to return to the launch pad.
 - Switch between Launch, Parts, Builder, and Travel from the top navigation.
 - In Parts Bay, buy metal packs and part templates with credits.
-- In Builder, select Metal Outline to spend metal on graph-paper cells, then select or drag owned parts into those cells.
+- In Builder, select Metal Outline to spend metal on graph-paper cells, then select or drag owned parts into a filled metal area.
+- Match the part footprint exactly: a 2x4 tank needs 8 metal cells in a 2-wide by 4-tall rectangle, not a 3x3 square.
 - Select a placed part and press **R** to rotate it.
 - Press **U** once, then click a placed part to return it to the template side.
 

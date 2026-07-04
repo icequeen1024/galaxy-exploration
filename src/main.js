@@ -916,7 +916,7 @@ function createMetalOutlineItem(canBuild) {
   item.setAttribute("aria-label", "Metal Outline, one graph cell");
   category.textContent = "Outline | 1 cell";
   name.textContent = "Metal Outline";
-  detail.textContent = `${metalAmount} metal ready. Each graph cell costs 1 metal.`;
+  detail.textContent = `${metalAmount} metal ready. Fill every cell under a part.`;
   item.append(category, name, detail);
 
   if (selectedBuilderPartId === METAL_OUTLINE_ID) {
@@ -957,7 +957,7 @@ function createBuilderPartItem(part, canBuild) {
   item.setAttribute("aria-label", `${part.name}, ${part.category}`);
   category.textContent = `${part.category} | ${formatPartFootprint(part)}`;
   name.textContent = part.name;
-  detail.textContent = part.required ? `${part.detail} Required.` : part.detail;
+  detail.textContent = `${metalRequirementText(part)} ${part.required ? `${part.detail} Required.` : part.detail}`;
   item.append(category, name, detail);
 
   if (selectedBuilderPartId === part.id) {
@@ -968,7 +968,7 @@ function createBuilderPartItem(part, canBuild) {
     selectedBuilderPartId = part.id;
     selectedPlacedPartId = null;
     unplacePartArmed = false;
-    builderStatusText = part.name;
+    builderStatusText = `${part.name}: ${metalRequirementText(part)}`;
     renderPlaceholderScreens(saveData);
   });
   item.addEventListener("dragstart", (event) => {
@@ -1416,7 +1416,7 @@ function placementProblemFor(placement, part, layout, grid, hullCells = new Set(
   const hasMetalOutline = proposedCells.every((cell) => hullCells.has(cell));
 
   if (!hasMetalOutline) {
-    return `${part.name} needs metal outline`;
+    return `${part.name} needs a filled ${formatPartFootprint(part, placement.rotation)} metal area`;
   }
 
   const hasOverlap = layout.some((placedPart) => {
@@ -2415,6 +2415,13 @@ function formatPartFootprint(part, rotation = 0) {
   const size = rotatedPartSize(part, rotation);
 
   return `${size.width}x${size.height}`;
+}
+
+function metalRequirementText(part, rotation = 0) {
+  const size = rotatedPartSize(part, rotation);
+  const cellCount = size.width * size.height;
+
+  return `Needs a filled ${size.width}x${size.height} metal area (${cellCount} cells).`;
 }
 
 function formatResources(resources) {

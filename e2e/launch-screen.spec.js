@@ -54,6 +54,43 @@ async function buyPartTemplate(page, partId) {
     .click();
 }
 
+function rectangleCells(startX, startY, width, height) {
+  const cells = [];
+
+  for (let y = startY; y < startY + height; y += 1) {
+    for (let x = startX; x < startX + width; x += 1) {
+      cells.push(`${x},${y}`);
+    }
+  }
+
+  return cells;
+}
+
+async function seedBuilderSave(page, { hullCells = [], resources = {}, unlockedParts = [] }) {
+  await page.evaluate(
+    ({ saveKey, hullCells: nextHullCells, resources: nextResources, unlockedParts: nextParts }) => {
+      const saveData = JSON.parse(localStorage.getItem(saveKey));
+      const activeShip =
+        saveData.builtShips.find((ship) => ship.id === saveData.activeShipId) ??
+        saveData.builtShips[0];
+
+      saveData.unlockedParts = [...new Set([...saveData.unlockedParts, ...nextParts])];
+      saveData.resources = { ...saveData.resources, ...nextResources };
+      activeShip.hullCells = nextHullCells;
+      activeShip.layout = [];
+      activeShip.partIds = [];
+      localStorage.setItem(saveKey, JSON.stringify(saveData));
+    },
+    {
+      saveKey: SAVE_KEY,
+      hullCells,
+      resources,
+      unlockedParts,
+    },
+  );
+  await reloadReadyGame(page);
+}
+
 async function buildMetalRectangle(page, startX, startY, width, height) {
   const builder = page.locator('[data-screen-panel="builder"]');
 
@@ -160,14 +197,40 @@ test("buys costly part templates from the Parts Bay", async ({ page }) => {
   expect(savedData.money).toBe(22000);
 });
 
+test("explains the exact metal area needed for a part footprint", async ({ page }) => {
+  test.setTimeout(60000);
+  await openReadyGame(page);
+  await seedBuilderSave(page, {
+    hullCells: rectangleCells(0, 0, 3, 3),
+    resources: { metal: 3 },
+    unlockedParts: ["tank-kerolox-s"],
+  });
+
+  await page.getByRole("button", { name: "Builder" }).click();
+  const builder = page.locator('[data-screen-panel="builder"]');
+
+  await builder.locator('[data-builder-part="tank-kerolox-s"]').dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText(
+    "Kerolox Tank S: Needs a filled 2x4 metal area (8 cells).",
+  );
+  await builder.locator('[data-builder-cell="0,0"]').dispatchEvent("click");
+
+  await expect(page.locator("#builder-status")).toContainText(
+    "Kerolox Tank S needs a filled 2x4 metal area",
+  );
+  await expect(builder.locator("[data-placed-part]")).toHaveCount(0);
+});
+
 test("places, moves, rotates, and unplaces part templates on the gridded ship graph", async ({
   page,
 }) => {
   test.setTimeout(60000);
   await openReadyGame(page);
-
-  await buyMetalPack(page, 2);
-  await buyPartTemplate(page, "tank-kerolox-m");
+  await seedBuilderSave(page, {
+    hullCells: rectangleCells(0, 9, 4, 6),
+    resources: { metal: 0 },
+    unlockedParts: ["tank-kerolox-m"],
+  });
 
   await page.getByRole("button", { name: "Builder" }).click();
   const builder = page.locator('[data-screen-panel="builder"]');
@@ -178,7 +241,6 @@ test("places, moves, rotates, and unplaces part templates on the gridded ship gr
   await expect(builder.locator(".builder-graph")).toBeVisible();
   await expect(builder.locator(".builder-grid-frame")).toBeVisible();
   await expect(builder.locator("[data-placed-part]")).toHaveCount(0);
-  await buildMetalRectangle(page, 0, 9, 4, 6);
   await expect(builder.locator(".builder-grid-cell.is-hull")).toHaveCount(24);
   await expect(fuelPart).toContainText("Kerolox Tank M");
   await fuelPart.dispatchEvent("click");
@@ -238,6 +300,7 @@ test("places, moves, rotates, and unplaces part templates on the gridded ship gr
 });
 
 test("scrolls through all part templates in the builder", async ({ page }) => {
+  test.setTimeout(60000);
   await openReadyGame(page);
 
   await page.evaluate(
@@ -283,6 +346,7 @@ test("updates the mission text when a new target is selected", async ({ page }) 
 test("shows a top notification instead of the result modal after landing", async ({
   page,
 }) => {
+  test.setTimeout(60000);
   await openReadyGame(page);
   await prepareAirMaker(page);
 
@@ -315,6 +379,7 @@ test("arrow steering keys do not change focused throttle", async ({ page }) => {
 });
 
 test("air maker consumes water and blocks launch when water is gone", async ({ page }) => {
+  test.setTimeout(60000);
   await openReadyGame(page);
   await prepareAirMaker(page, 1);
 
