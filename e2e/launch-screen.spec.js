@@ -195,6 +195,30 @@ test("buys costly part templates from the Parts Bay", async ({ page }) => {
   expect(savedData.money).toBe(22000);
 });
 
+test("resells extra metal lines from the Parts Bay", async ({ page }) => {
+  await openReadyGame(page);
+
+  await page.getByRole("button", { name: "Parts" }).click();
+  const parts = page.locator('[data-screen-panel="shop"]');
+  const metalPack = parts.locator('[data-part-id="metal-outline"]');
+
+  await expect(metalPack).toContainText("Sell extra lines for 100 credits each");
+  await expect(metalPack.getByRole("button", { name: "Sell 1" })).toBeDisabled();
+  await metalPack.getByRole("button", { name: "Buy" }).click();
+  await expect(page.locator("#shop-money")).toContainText("23,800 credits | Metal 12");
+  await expect(metalPack.getByRole("button", { name: "Sell 1" })).toBeEnabled();
+  await metalPack.getByRole("button", { name: "Sell 1" }).click();
+
+  await expect(page.locator("#shop-money")).toContainText("23,900 credits | Metal 11");
+
+  const savedData = await page.evaluate(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
+  });
+
+  expect(savedData.resources.metal).toBe(11);
+  expect(savedData.money).toBe(23900);
+});
+
 test("buys paint colors from the Parts Bay", async ({ page }) => {
   await openReadyGame(page);
 

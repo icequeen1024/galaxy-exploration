@@ -53,6 +53,7 @@ Open the local URL printed by Vite, usually `http://127.0.0.1:5173/`.
 - Use **Reset** to start over with the blank starter save, clearing bought parts, paints, metal, and the builder.
 - Switch between Launch, Parts, Builder, and Travel from the top navigation.
 - In Parts Bay, buy metal packs, paint colors, and part templates with credits.
+- In Parts Bay, use **Sell 1** on Metal Pack to resell extra metal lines for credits.
 - In Builder, place a part first, then select Metal Line and click cells on the part to seal them.
 - Select a bought or mixed paint color in Builder, set the Brush Size, then drag across placed blocks to smear thin paint marks.
 - Paint cannot be erased; paint over it with another color or brush size to change it.

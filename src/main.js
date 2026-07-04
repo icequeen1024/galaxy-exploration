@@ -499,6 +499,7 @@ const REQUIRED_LIFE_SUPPORT_PART_ID = "air-maker-basic";
 const METAL_OUTLINE_ID = "metal-outline";
 const METAL_PACK_SIZE = 12;
 const METAL_PACK_COST = 1200;
+const METAL_LINE_RESALE_VALUE = METAL_PACK_COST / METAL_PACK_SIZE;
 const METAL_PIECES_PER_CELL = 2;
 const PAINT_BRUSH_MIN_SIZE = 0.08;
 const PAINT_BRUSH_MAX_SIZE = 0.72;
@@ -897,6 +898,28 @@ function buyMetal() {
   renderPlaceholderScreens(saveData);
 }
 
+function sellMetalLine() {
+  if (!isAtHomeworldSavePoint()) {
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  if ((saveData.resources.metal ?? 0) <= 0) {
+    builderStatusText = "No metal lines to sell";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  saveData.resources.metal -= 1;
+  saveData.money += METAL_LINE_RESALE_VALUE;
+  selectedBuilderPartId = METAL_OUTLINE_ID;
+  selectedPlacedPartId = null;
+  builderStatusText = `Sold 1 metal line for ${METAL_LINE_RESALE_VALUE.toLocaleString()} credits`;
+  Object.assign(saveData, saveGameData(saveData));
+  renderPlaceholderScreens(saveData);
+}
+
 function buyPaint(paintId) {
   const paint = paintLabels[paintId];
 
@@ -960,11 +983,21 @@ function renderPlaceholderScreens(data) {
       partId: METAL_OUTLINE_ID,
       label: "Ship Outline",
       name: "Metal Pack",
-      detail: `${METAL_PACK_SIZE} metal lines | ${METAL_PACK_COST.toLocaleString()} credits. Place parts first, then seal their graph cells with metal lines.`,
-      buttonLabel: "Buy",
-      buttonDisabled: !canShop || data.money < METAL_PACK_COST,
-      buttonTitle: partsBayButtonTitle(false, canShop, data.money >= METAL_PACK_COST),
-      onAction: buyMetal,
+      detail: `${METAL_PACK_SIZE} metal lines | ${METAL_PACK_COST.toLocaleString()} credits. Sell extra lines for ${METAL_LINE_RESALE_VALUE.toLocaleString()} credits each.`,
+      actions: [
+        {
+          label: "Buy",
+          disabled: !canShop || data.money < METAL_PACK_COST,
+          title: partsBayButtonTitle(false, canShop, data.money >= METAL_PACK_COST),
+          onAction: buyMetal,
+        },
+        {
+          label: "Sell 1",
+          disabled: !canShop || metalAmount <= 0,
+          title: metalSellButtonTitle(canShop, metalAmount),
+          onAction: sellMetalLine,
+        },
+      ],
     },
     ...PAINT_CATALOG.map((paint) => {
       const isOwned = data.unlockedPaints.includes(paint.id);
@@ -2292,18 +2325,40 @@ function createScreenItem(item) {
   detail.textContent = item.detail;
   element.append(label, name, detail);
 
+  if (Array.isArray(item.actions) && item.actions.length > 0) {
+    const actions = document.createElement("div");
+
+    actions.className = "screen-item-actions";
+    actions.append(...item.actions.map((actionItem) => createScreenItemAction(actionItem)));
+    element.append(actions);
+    return element;
+  }
+
   if (item.buttonLabel) {
-    const action = document.createElement("button");
-    action.className = "screen-item-action";
-    action.type = "button";
-    action.textContent = item.buttonLabel;
-    action.disabled = item.buttonDisabled;
-    action.title = item.buttonTitle ?? "";
-    action.addEventListener("click", item.onAction);
-    element.append(action);
+    element.append(
+      createScreenItemAction({
+        label: item.buttonLabel,
+        disabled: item.buttonDisabled,
+        title: item.buttonTitle,
+        onAction: item.onAction,
+      }),
+    );
   }
 
   return element;
+}
+
+function createScreenItemAction(actionItem) {
+  const action = document.createElement("button");
+
+  action.className = "screen-item-action";
+  action.type = "button";
+  action.textContent = actionItem.label;
+  action.disabled = actionItem.disabled;
+  action.title = actionItem.title ?? "";
+  action.addEventListener("click", actionItem.onAction);
+
+  return action;
 }
 
 function partsBayButtonTitle(isOwned, canShop, canAfford) {
@@ -2320,6 +2375,18 @@ function partsBayButtonTitle(isOwned, canShop, canAfford) {
   }
 
   return "Buy this part";
+}
+
+function metalSellButtonTitle(canShop, metalAmount) {
+  if (!canShop) {
+    return "Return to Homeworld to sell metal lines";
+  }
+
+  if (metalAmount <= 0) {
+    return "No metal lines to sell";
+  }
+
+  return `Sell 1 metal line for ${METAL_LINE_RESALE_VALUE.toLocaleString()} credits`;
 }
 
 function createPlanetDistanceLabel(name) {
