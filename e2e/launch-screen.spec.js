@@ -101,6 +101,27 @@ async function prepareAirMaker(page, waterAmount) {
   }
 }
 
+async function dragAcrossPlacedPartCells(page, placedPart, cells, columns, rows) {
+  const box = await placedPart.boundingBox();
+
+  expect(box).not.toBeNull();
+
+  const pointForCell = ([x, y]) => ({
+    x: box.x + ((x + 0.5) / columns) * box.width,
+    y: box.y + ((y + 0.5) / rows) * box.height,
+  });
+  const [firstCell, ...remainingCells] = cells.map(pointForCell);
+
+  await page.mouse.move(firstCell.x, firstCell.y);
+  await page.mouse.down();
+
+  for (const cell of remainingCells) {
+    await page.mouse.move(cell.x, cell.y);
+  }
+
+  await page.mouse.up();
+}
+
 test("renders the launch prototype shell", async ({ page }) => {
   await openReadyGame(page);
 
@@ -180,9 +201,12 @@ test("buys paint colors from the Parts Bay", async ({ page }) => {
   await page.getByRole("button", { name: "Parts" }).click();
   const parts = page.locator('[data-screen-panel="shop"]');
   const brownPaint = parts.locator('[data-part-id="paint-brown"]');
+  const orangePaint = parts.locator('[data-part-id="paint-orange"]');
 
   await expect(brownPaint).toContainText("Brown Paint");
   await expect(brownPaint).toContainText("450 credits");
+  await expect(orangePaint).toContainText("Orange Paint");
+  await expect(orangePaint).toContainText("400 credits");
   await brownPaint.getByRole("button", { name: "Buy" }).click();
 
   await expect(page.locator("#shop-money")).toContainText("24,550 credits");
@@ -219,13 +243,10 @@ test("buys paint and paints a placed ship part", async ({ page }) => {
   await brownPaint.dispatchEvent("click");
   await placedTank.dispatchEvent("click");
   await expect(page.locator("#builder-status")).toContainText(
-    "Painted Kerolox Tank S brown",
+    "Painted Kerolox Tank S block brown",
   );
-  await expect(placedTank).toContainText("Brown Paint");
 
-  const paintedPartStyle = await placedTank.evaluate((element) => {
-    return element.style.getPropertyValue("--part-color").trim();
-  });
+  await expect(placedTank.locator(".builder-grid-part-paint-cell")).toHaveCount(1);
   const savedData = await page.evaluate(() => {
     return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
   });
@@ -233,14 +254,100 @@ test("buys paint and paints a placed ship part", async ({ page }) => {
     (ship) => ship.id === savedData.activeShipId,
   );
 
-  expect(paintedPartStyle).toBe("#6b3f25");
   expect(savedData.unlockedPaints).toContain("paint-brown");
   expect(activeShip.layout).toContainEqual(
     expect.objectContaining({
       partId: "tank-kerolox-s",
-      paintId: "paint-brown",
+      paintCells: expect.objectContaining({
+        "0,0": expect.objectContaining({
+          paintId: "paint-brown",
+          color: "#6b3f25",
+        }),
+      }),
     }),
   );
+});
+
+test("mixes peach paint and smears brush strokes across ship blocks", async ({ page }) => {
+  test.setTimeout(60000);
+  await openReadyGame(page);
+  await seedBuilderSave(page, {
+    unlockedParts: ["tank-orbital-xl"],
+    unlockedPaints: ["paint-white", "paint-orange", "paint-black"],
+  });
+
+  await page.getByRole("button", { name: "Builder" }).click();
+  const builder = page.locator('[data-screen-panel="builder"]');
+
+  await builder.locator('[data-builder-part="tank-orbital-xl"]').dispatchEvent("click");
+  await builder.locator('[data-builder-cell="1,1"]').dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText("Placed Orbital Tank XL");
+
+  const placedTank = builder.locator('[data-placed-part="tank-orbital-xl"]');
+  const peachPaint = builder.locator('[data-builder-part="paint-peach"]');
+  await expect(peachPaint).toContainText("Peach Paint");
+
+  await peachPaint.dispatchEvent("click");
+  await dragAcrossPlacedPartCells(
+    page,
+    placedTank,
+    [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+      [0, 1],
+      [1, 1],
+      [2, 1],
+      [3, 1],
+    ],
+    4,
+    5,
+  );
+  await expect(page.locator("#builder-status")).toContainText(
+    "Painted Orbital Tank XL block peach",
+  );
+
+  await builder.locator('[data-builder-part="paint-black"]').dispatchEvent("click");
+  await dragAcrossPlacedPartCells(
+    page,
+    placedTank,
+    [
+      [1, 1],
+      [2, 1],
+    ],
+    4,
+    5,
+  );
+  await expect(page.locator("#builder-status")).toContainText(
+    "Painted Orbital Tank XL block black",
+  );
+  await expect(placedTank.locator(".builder-grid-part-paint-cell")).toHaveCount(8);
+
+  const savedData = await page.evaluate(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
+  });
+  const activeShip = savedData.builtShips.find(
+    (ship) => ship.id === savedData.activeShipId,
+  );
+  const orbitalTank = activeShip.layout.find((part) => part.partId === "tank-orbital-xl");
+
+  expect(orbitalTank.paintCells["0,0"]).toMatchObject({
+    paintId: "paint-peach",
+    color: "#f5b98b",
+  });
+  expect(orbitalTank.paintCells["3,1"]).toMatchObject({
+    paintId: "paint-peach",
+    color: "#f5b98b",
+  });
+  expect(orbitalTank.paintCells["1,1"]).toMatchObject({
+    paintId: "paint-black",
+    color: "#24262d",
+  });
+  expect(orbitalTank.paintCells["2,1"]).toMatchObject({
+    paintId: "paint-black",
+    color: "#24262d",
+  });
 });
 
 test("reset clears bought parts, paints, metal, and the builder", async ({ page }) => {
@@ -261,7 +368,7 @@ test("reset clears bought parts, paints, metal, and the builder", async ({ page 
   await builder.locator('[data-builder-part="paint-brown"]').dispatchEvent("click");
   await builder.locator('[data-placed-part="tank-kerolox-s"]').dispatchEvent("click");
   await expect(page.locator("#builder-status")).toContainText(
-    "Painted Kerolox Tank S brown",
+    "Painted Kerolox Tank S block brown",
   );
 
   await page.getByRole("button", { name: "Launch" }).click();

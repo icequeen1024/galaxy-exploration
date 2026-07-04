@@ -250,19 +250,24 @@ function normalizeShipLayout(value, fallback) {
 
   const normalizedLayout = value
     .filter((part) => part && typeof part === "object" && typeof part.partId === "string")
-    .map((part, index) => ({
-      id:
-        typeof part.id === "string" && part.id.length > 0
-          ? part.id
-          : `layout-part-${index + 1}`,
-      partId: part.partId,
-      x: normalizeGridPosition(part.x),
-      y: normalizeGridPosition(part.y),
-      rotation: normalizeRotation(part.rotation),
-      ...(typeof part.paintId === "string" && part.paintId.length > 0
-        ? { paintId: part.paintId }
-        : {}),
-    }));
+    .map((part, index) => {
+      const paintCells = normalizePaintCells(part.paintCells);
+
+      return {
+        id:
+          typeof part.id === "string" && part.id.length > 0
+            ? part.id
+            : `layout-part-${index + 1}`,
+        partId: part.partId,
+        x: normalizeGridPosition(part.x),
+        y: normalizeGridPosition(part.y),
+        rotation: normalizeRotation(part.rotation),
+        ...(typeof part.paintId === "string" && part.paintId.length > 0
+          ? { paintId: part.paintId }
+          : {}),
+        ...(Object.keys(paintCells).length > 0 ? { paintCells } : {}),
+      };
+    });
 
   return normalizedLayout.length > 0 ? normalizedLayout : cloneLayout(fallback);
 }
@@ -316,5 +321,54 @@ function normalizeRotation(value) {
 }
 
 function cloneLayout(layout) {
-  return layout.map((part) => ({ ...part }));
+  return layout.map((part) => {
+    const clone = { ...part };
+
+    if (part.paintCells && typeof part.paintCells === "object") {
+      clone.paintCells = normalizePaintCells(part.paintCells);
+    }
+
+    return clone;
+  });
+}
+
+function normalizePaintCells(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([cellKey, paint]) => {
+        const match = cellKey.match(/^(-?\d+),(-?\d+)$/);
+
+        if (!match) {
+          return null;
+        }
+
+        const key = `${normalizeGridPosition(Number(match[1]))},${normalizeGridPosition(Number(match[2]))}`;
+        const color =
+          typeof paint?.color === "string" && /^#[0-9a-f]{6}$/i.test(paint.color)
+            ? paint.color.toLowerCase()
+            : "";
+
+        if (!color) {
+          return null;
+        }
+
+        return [
+          key,
+          {
+            color,
+            ...(typeof paint.paintId === "string" && paint.paintId.length > 0
+              ? { paintId: paint.paintId }
+              : {}),
+            ...(typeof paint.name === "string" && paint.name.length > 0
+              ? { name: paint.name }
+              : {}),
+          },
+        ];
+      })
+      .filter(Boolean),
+  );
 }

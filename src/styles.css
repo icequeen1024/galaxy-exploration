@@ -487,6 +487,31 @@ select {
   border-color: rgb(5 16 28 / 76%);
 }
 
+.builder-grid-part.is-paint-target {
+  cursor: crosshair;
+}
+
+.builder-grid-part-paint-cells {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--paint-cell-cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--paint-cell-rows), minmax(0, 1fr));
+  pointer-events: none;
+}
+
+.builder-grid-part-paint-cell {
+  opacity: 0.96;
+}
+
+.builder-grid-part > span,
+.builder-grid-part > strong,
+.builder-grid-part > small {
+  position: relative;
+  z-index: 1;
+}
+
 .builder-grid-part.is-selected {
   border-color: #07111d;
   box-shadow: 0 0 0 3px rgb(110 215 255 / 54%), 0 8px 18px rgb(6 15 26 / 28%);

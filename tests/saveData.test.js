@@ -83,6 +83,13 @@ describe("save data", () => {
               y: 2,
               rotation: 90,
               paintId: "paint-brown",
+              paintCells: {
+                "0,0": {
+                  paintId: "paint-peach",
+                  name: "Peach Paint",
+                  color: "#f5b98b",
+                },
+              },
             },
           ],
         },
@@ -94,6 +101,13 @@ describe("save data", () => {
       expect.objectContaining({
         id: "painted-tank",
         paintId: "paint-brown",
+        paintCells: {
+          "0,0": {
+            paintId: "paint-peach",
+            name: "Peach Paint",
+            color: "#f5b98b",
+          },
+        },
       }),
     );
   });

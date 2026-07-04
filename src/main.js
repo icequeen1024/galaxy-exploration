@@ -460,6 +460,13 @@ const PAINT_CATALOG = [
     cost: 400,
   },
   {
+    id: "paint-orange",
+    name: "Orange Paint",
+    shortName: "orange",
+    color: "#e88945",
+    cost: 400,
+  },
+  {
     id: "paint-brown",
     name: "Brown Paint",
     shortName: "brown",
@@ -475,6 +482,15 @@ const PAINT_CATALOG = [
   },
 ];
 const paintLabels = Object.fromEntries(PAINT_CATALOG.map((paint) => [paint.id, paint]));
+const MIXED_PAINT_RECIPES = [
+  {
+    id: "paint-peach",
+    name: "Peach Paint",
+    shortName: "peach",
+    color: "#f5b98b",
+    ingredients: ["paint-orange", "paint-white"],
+  },
+];
 const BUILDER_GRID_COLUMNS = STARTER_SHIP_GRID.columns;
 const BUILDER_GRID_ROWS = STARTER_SHIP_GRID.rows;
 const REQUIRED_LIFE_SUPPORT_PART_ID = "air-maker-basic";
@@ -1000,9 +1016,7 @@ function renderBuilder(activeShip) {
   const availableParts = saveData.unlockedParts
     .map((partId) => partLabels[partId])
     .filter(Boolean);
-  const availablePaints = saveData.unlockedPaints
-    .map((paintId) => paintLabels[paintId])
-    .filter(Boolean);
+  const availablePaints = paintOptionsForSave(saveData);
   const lifeSupport = lifeSupportStatusFor(activeShip);
   const metalAmount = saveData.resources.metal ?? 0;
   const metalLines = metalPiecesForShip(activeShip).total;
@@ -1077,11 +1091,13 @@ function createBuilderPaintItem(paint, canBuild) {
   item.dataset.category = "Paint";
   item.setAttribute("aria-label", `${paint.name}, paint color`);
   item.style.setProperty("--paint-color", paint.color);
-  category.textContent = "Paint | color";
+  category.textContent = paint.ingredients ? "Paint | mixed" : "Paint | color";
   swatch.className = "paint-swatch";
   swatch.setAttribute("aria-hidden", "true");
   name.textContent = paint.name;
-  detail.textContent = "Click a placed part to paint it.";
+  detail.textContent = paint.ingredients
+    ? "Mixed from owned colors. Drag across placed blocks."
+    : "Drag across placed blocks to paint.";
   name.prepend(swatch);
   item.append(category, name, detail);
 
@@ -1248,6 +1264,38 @@ function createMetalGridLine(x, y, pieceCount) {
   return line;
 }
 
+function createPaintCellsLayer(placedPart, part) {
+  const layer = document.createElement("div");
+  const size = rotatedPartSize(part, placedPart.rotation);
+
+  layer.className = "builder-grid-part-paint-cells";
+  layer.style.setProperty("--paint-cell-cols", size.width);
+  layer.style.setProperty("--paint-cell-rows", size.height);
+  layer.setAttribute("aria-hidden", "true");
+
+  for (const [cellKey, paint] of Object.entries(paintCellsForPlacedPart(placedPart))) {
+    const [x, y] = cellKey.split(",").map((position) => Number(position));
+
+    if (x >= 0 && y >= 0 && x < size.width && y < size.height) {
+      layer.append(createPaintCellNode(x, y, paint));
+    }
+  }
+
+  return layer;
+}
+
+function createPaintCellNode(x, y, paint) {
+  const cell = document.createElement("div");
+
+  cell.className = "builder-grid-part-paint-cell";
+  cell.dataset.paintCell = `${x},${y}`;
+  cell.style.gridColumn = `${x + 1}`;
+  cell.style.gridRow = `${y + 1}`;
+  cell.style.background = paint.color;
+
+  return cell;
+}
+
 function createPlacedGridPart(placedPart, part, canBuild) {
   const node = document.createElement("button");
   const category = document.createElement("span");
@@ -1255,10 +1303,11 @@ function createPlacedGridPart(placedPart, part, canBuild) {
   const detail = document.createElement("small");
   const size = rotatedPartSize(part, placedPart.rotation);
   const paint = paintForPlacedPart(placedPart);
+  const paintBrush = paintBrushForSelection();
 
   node.className = "builder-grid-part";
   node.type = "button";
-  node.draggable = canBuild;
+  node.draggable = canBuild && !paintBrush;
   node.dataset.placedPart = placedPart.partId;
   node.dataset.placedId = placedPart.id;
   node.dataset.rotation = String(placedPart.rotation ?? 0);
@@ -1270,8 +1319,8 @@ function createPlacedGridPart(placedPart, part, canBuild) {
   node.setAttribute("aria-label", `${part.name}, placed on grid`);
   category.textContent = `${part.category} | ${formatPartFootprint(part, placedPart.rotation)}`;
   name.textContent = part.name;
-  detail.textContent = `${placedPartSealText(placedPart, part)} | ${paint.name}`;
-  node.append(category, name, detail);
+  detail.textContent = `${placedPartSealText(placedPart, part)} | ${placedPartPaintSummary(placedPart, paint)}`;
+  node.append(createPaintCellsLayer(placedPart, part), category, name, detail);
 
   if (placedPart.id === selectedPlacedPartId) {
     node.classList.add("is-selected");
@@ -1279,6 +1328,10 @@ function createPlacedGridPart(placedPart, part, canBuild) {
 
   if (unplacePartArmed) {
     node.classList.add("is-unplace-target");
+  }
+
+  if (paintBrush) {
+    node.classList.add("is-paint-target");
   }
 
   if (size.height <= 1 || size.width <= 2) {
@@ -1303,8 +1356,8 @@ function createPlacedGridPart(placedPart, part, canBuild) {
       return;
     }
 
-    if (paintLabels[selectedBuilderPartId]) {
-      paintPlacedPart(placedPart.id, selectedBuilderPartId);
+    if (paintBrushForSelection()) {
+      paintPlacedPartCellFromEvent(event, placedPart, part);
       return;
     }
 
@@ -1324,6 +1377,34 @@ function createPlacedGridPart(placedPart, part, canBuild) {
   node.addEventListener("dragend", () => {
     draggedPlacedPartId = null;
   });
+  node.addEventListener("pointerdown", (event) => {
+    if (!paintBrushForSelection()) {
+      return;
+    }
+
+    event.preventDefault();
+    try {
+      node.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointer events in tests may not be captureable.
+    }
+    paintPlacedPartCellFromEvent(event, placedPart, part, { render: false });
+  });
+  node.addEventListener("pointermove", (event) => {
+    if (!paintBrushForSelection() || event.buttons !== 1) {
+      return;
+    }
+
+    event.preventDefault();
+    paintPlacedPartCellFromEvent(event, placedPart, part, { render: false });
+  });
+  for (const eventName of ["pointerup", "pointercancel", "lostpointercapture"]) {
+    node.addEventListener(eventName, () => {
+      if (paintBrushForSelection()) {
+        renderPlaceholderScreens(saveData);
+      }
+    });
+  }
 
   return node;
 }
@@ -1362,7 +1443,7 @@ function placeDroppedBuilderItem(dataTransferValue, x, y) {
       return;
     }
 
-    if (paintLabels[draggedBuilderPartId]) {
+    if (paintOptionForId(draggedBuilderPartId)) {
       paintPlacedPartAtCell(draggedBuilderPartId, x, y);
       return;
     }
@@ -1388,7 +1469,7 @@ function placeBuilderSelectionAt(x, y) {
       return;
     }
 
-    if (paintLabels[selectedBuilderPartId]) {
+    if (paintBrushForSelection()) {
       paintPlacedPartAtCell(selectedBuilderPartId, x, y);
       return;
     }
@@ -1530,27 +1611,48 @@ function unplacePlacedPart(placedPartId) {
 function paintPlacedPartAtCell(paintId, x, y) {
   const activeShip = activeShipFor();
   const placedPart = placedPartAtCell(activeShip, `${x},${y}`);
+  const part = partLabels[placedPart?.partId];
 
-  if (!placedPart) {
+  if (!placedPart || !part) {
     builderStatusText = "Click a placed part to paint it";
     renderPlaceholderScreens(saveData);
     return;
   }
 
-  paintPlacedPart(placedPart.id, paintId);
+  paintPlacedPartCell(placedPart.id, x - placedPart.x, y - placedPart.y, paintId);
 }
 
-function paintPlacedPart(placedPartId, paintId) {
+function paintPlacedPartCellFromEvent(
+  event,
+  placedPart,
+  part,
+  { render = true } = {},
+) {
+  const localCell = localCellFromPlacedPartPointer(event, placedPart, part);
+  paintPlacedPartCell(placedPart.id, localCell.x, localCell.y, selectedBuilderPartId, {
+    render,
+  });
+
+  if (!render) {
+    const paint = paintBrushForSelection();
+    if (paint) {
+      applyPaintCellToNode(event.currentTarget, localCell.x, localCell.y, part, placedPart, paint);
+    }
+  }
+}
+
+function paintPlacedPartCell(placedPartId, localX, localY, paintId, { render = true } = {}) {
   const activeShip = activeShipFor();
-  const paint = paintLabels[paintId];
+  const paint = paintOptionForId(paintId);
   const placedPart = layoutForShip(activeShip).find((item) => item.id === placedPartId);
   const part = partLabels[placedPart?.partId];
+  const size = part ? rotatedPartSize(part, placedPart.rotation) : { width: 0, height: 0 };
 
   if (!activeShip || !paint || !placedPart || !part) {
     return;
   }
 
-  if (!saveData.unlockedPaints.includes(paint.id)) {
+  if (!paintIsAvailable(paint.id)) {
     builderStatusText = "Buy that paint first";
     renderPlaceholderScreens(saveData);
     return;
@@ -1562,15 +1664,37 @@ function paintPlacedPart(placedPartId, paintId) {
     return;
   }
 
+  if (localX < 0 || localY < 0 || localX >= size.width || localY >= size.height) {
+    builderStatusText = "Paint goes on placed blocks";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  const cellKey = `${localX},${localY}`;
   activeShip.layout = layoutForShip(activeShip).map((item) =>
-    item.id === placedPartId ? { ...item, paintId: paint.id } : item,
+    item.id === placedPartId
+      ? {
+          ...item,
+          paintCells: {
+            ...(item.paintCells ?? {}),
+            [cellKey]: {
+              paintId: paint.id,
+              name: paint.name,
+              color: paint.color,
+            },
+          },
+        }
+      : item,
   );
   selectedBuilderPartId = paint.id;
   selectedPlacedPartId = placedPartId;
   unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
-  builderStatusText = `Painted ${part.name} ${paint.shortName}`;
-  renderPlaceholderScreens(saveData);
+  builderStatusText = `Painted ${part.name} block ${paint.shortName}`;
+
+  if (render) {
+    renderPlaceholderScreens(saveData);
+  }
 }
 
 function placePartOnGrid(partId, x, y) {
@@ -1774,6 +1898,15 @@ function cellFromPointer(event, frame, grid) {
 }
 
 function cellFromPlacedPartPointer(event, placedPart, part) {
+  const localCell = localCellFromPlacedPartPointer(event, placedPart, part);
+
+  return {
+    x: placedPart.x + localCell.x,
+    y: placedPart.y + localCell.y,
+  };
+}
+
+function localCellFromPlacedPartPointer(event, placedPart, part) {
   const rect = event.currentTarget.getBoundingClientRect();
   const size = rotatedPartSize(part, placedPart.rotation);
   const x = clampNumber(
@@ -1787,10 +1920,7 @@ function cellFromPlacedPartPointer(event, placedPart, part) {
     size.height - 1,
   );
 
-  return {
-    x: placedPart.x + x,
-    y: placedPart.y + y,
-  };
+  return { x, y };
 }
 
 function gridForShip(activeShip) {
@@ -1799,6 +1929,28 @@ function gridForShip(activeShip) {
 
 function layoutForShip(activeShip) {
   return Array.isArray(activeShip?.layout) ? activeShip.layout : [];
+}
+
+function paintOptionsForSave(data = saveData) {
+  const unlockedPaints = new Set(data.unlockedPaints ?? []);
+  const ownedPaints = PAINT_CATALOG.filter((paint) => unlockedPaints.has(paint.id));
+  const mixedPaints = MIXED_PAINT_RECIPES.filter((paint) => {
+    return paint.ingredients.every((paintId) => unlockedPaints.has(paintId));
+  });
+
+  return [...ownedPaints, ...mixedPaints];
+}
+
+function paintOptionForId(paintId, data = saveData) {
+  return paintOptionsForSave(data).find((paint) => paint.id === paintId) ?? null;
+}
+
+function paintIsAvailable(paintId) {
+  return Boolean(paintOptionForId(paintId));
+}
+
+function paintBrushForSelection() {
+  return paintOptionForId(selectedBuilderPartId);
 }
 
 function paintForPlacedPart(placedPart, part = partLabels[placedPart?.partId]) {
@@ -1810,6 +1962,56 @@ function paintForPlacedPart(placedPart, part = partLabels[placedPart?.partId]) {
     shortName: paint?.shortName ?? "factory",
     color: paint?.color ?? part?.color ?? "#d8e4ed",
   };
+}
+
+function paintCellsForPlacedPart(placedPart) {
+  if (!placedPart?.paintCells || typeof placedPart.paintCells !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(placedPart.paintCells).filter(([, paint]) => {
+      return typeof paint?.color === "string" && /^#[0-9a-f]{6}$/i.test(paint.color);
+    }),
+  );
+}
+
+function paintCellForPlacedPart(placedPart, localX, localY) {
+  return paintCellsForPlacedPart(placedPart)[`${localX},${localY}`] ?? null;
+}
+
+function placedPartPaintSummary(placedPart, basePaint) {
+  const paintedCells = Object.values(paintCellsForPlacedPart(placedPart));
+
+  if (paintedCells.length === 0) {
+    return basePaint.name;
+  }
+
+  const names = [...new Set(paintedCells.map((paint) => paint.name).filter(Boolean))];
+
+  return names.length === 1 ? names[0] : `${names.length} paints`;
+}
+
+function applyPaintCellToNode(node, localX, localY, part, placedPart, paint) {
+  const size = rotatedPartSize(part, placedPart.rotation);
+  let layer = node.querySelector(".builder-grid-part-paint-cells");
+
+  if (!layer) {
+    layer = createPaintCellsLayer(placedPart, part);
+    node.prepend(layer);
+  }
+
+  layer.style.setProperty("--paint-cell-cols", size.width);
+  layer.style.setProperty("--paint-cell-rows", size.height);
+
+  let cell = layer.querySelector(`[data-paint-cell="${localX},${localY}"]`);
+
+  if (!cell) {
+    cell = createPaintCellNode(localX, localY, paint);
+    layer.append(cell);
+  }
+
+  cell.style.background = paint.color;
 }
 
 function metalPiecesForShip(activeShip) {
@@ -2761,19 +2963,32 @@ function drawActiveShipBody(target, activeShip) {
     const y = top + (placedPart.y - bounds.minY) * cellSize;
     const width = size.width * cellSize;
     const height = size.height * cellSize;
-    const color = cssHexToNumber(paint.color);
-    const highlight = mixColor(color, 0xffffff, 0.24);
-    const shade = mixColor(color, 0x05070d, 0.32);
 
-    target
-      .rect(x, y, width, height)
-      .fill(color)
-      .rect(x, y, width, Math.max(2, cellSize * 0.18))
-      .fill({ color: highlight, alpha: 0.38 })
-      .rect(x, y + height - Math.max(2, cellSize * 0.16), width, Math.max(2, cellSize * 0.16))
-      .fill({ color: shade, alpha: 0.28 })
-      .rect(x, y, width, height)
-      .stroke({ color: 0x07111d, alpha: 0.78, width: 1.5 });
+    for (let cellY = 0; cellY < size.height; cellY += 1) {
+      for (let cellX = 0; cellX < size.width; cellX += 1) {
+        const cellPaint = paintCellForPlacedPart(placedPart, cellX, cellY);
+        const color = cssHexToNumber(cellPaint?.color ?? paint.color);
+        const highlight = mixColor(color, 0xffffff, 0.24);
+        const shade = mixColor(color, 0x05070d, 0.32);
+        const cellLeft = x + cellX * cellSize;
+        const cellTop = y + cellY * cellSize;
+
+        target
+          .rect(cellLeft, cellTop, cellSize, cellSize)
+          .fill(color)
+          .rect(cellLeft, cellTop, cellSize, Math.max(1.4, cellSize * 0.16))
+          .fill({ color: highlight, alpha: 0.32 })
+          .rect(
+            cellLeft,
+            cellTop + cellSize - Math.max(1.4, cellSize * 0.13),
+            cellSize,
+            Math.max(1.4, cellSize * 0.13),
+          )
+          .fill({ color: shade, alpha: 0.2 });
+      }
+    }
+
+    target.rect(x, y, width, height).stroke({ color: 0x07111d, alpha: 0.78, width: 1.5 });
 
     drawShipPartGridLines(target, x, y, size.width, size.height, cellSize);
   }

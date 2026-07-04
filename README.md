@@ -54,7 +54,8 @@ Open the local URL printed by Vite, usually `http://127.0.0.1:5173/`.
 - Switch between Launch, Parts, Builder, and Travel from the top navigation.
 - In Parts Bay, buy metal packs, paint colors, and part templates with credits.
 - In Builder, place a part first, then select Metal Line and click cells on the part to seal them.
-- Select a bought paint color in Builder, then click a placed part to repaint it.
+- Select a bought or mixed paint color in Builder, then drag across placed blocks to smear the brush.
+- Paint cannot be removed block-by-block; paint over it with another color to change it.
 - Each occupied block needs 2 metal lines. A 2x4 tank uses 8 graph blocks, so it needs 16 metal lines to fully seal.
 - Select a placed part and press **R** to rotate it.
 - Press **U** once, then click a placed part to return it to the template side or click a metal line to remove it.
