@@ -297,6 +297,25 @@ test("places, moves, rotates, and unplaces part templates on the gridded ship gr
       partId: "tank-kerolox-m",
     }),
   );
+
+  await page.keyboard.press("U");
+  await expect(page.locator("#builder-status")).toContainText("Unplace ready");
+  await builder.locator('[data-builder-cell="0,9"]').dispatchEvent("click");
+
+  await expect(page.locator("#builder-status")).toContainText(
+    "Removed metal outline (1 metal ready)",
+  );
+  await expect(builder.locator(".builder-grid-cell.is-hull")).toHaveCount(23);
+
+  const metalRemovedSaveData = await page.evaluate(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
+  });
+  const metalRemovedActiveShip = metalRemovedSaveData.builtShips.find(
+    (ship) => ship.id === metalRemovedSaveData.activeShipId,
+  );
+
+  expect(metalRemovedSaveData.resources.metal).toBe(1);
+  expect(metalRemovedActiveShip.hullCells).not.toContain("0,9");
 });
 
 test("scrolls through all part templates in the builder", async ({ page }) => {

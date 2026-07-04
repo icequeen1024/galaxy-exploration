@@ -1047,6 +1047,9 @@ function createBuilderCell(x, y, canBuild, isHullCell) {
   if (isHullCell) {
     cell.classList.add("is-hull");
   }
+  if (isHullCell && unplacePartArmed) {
+    cell.classList.add("is-unplace-target");
+  }
   cell.type = "button";
   cell.disabled = !canBuild;
   cell.dataset.builderCell = `${x},${y}`;
@@ -1157,6 +1160,11 @@ function placeDroppedBuilderItem(dataTransferValue, x, y) {
 }
 
 function placeBuilderSelectionAt(x, y) {
+  if (unplacePartArmed) {
+    unplaceHullCell(x, y);
+    return;
+  }
+
   if (selectedPlacedPartId) {
     movePlacedPartToGrid(selectedPlacedPartId, x, y);
     return;
@@ -1229,7 +1237,52 @@ function armUnplacePart() {
   unplacePartArmed = true;
   selectedBuilderPartId = null;
   selectedPlacedPartId = null;
-  builderStatusText = "Unplace ready: click a part";
+  builderStatusText = "Unplace ready: click a part or metal cell";
+  renderPlaceholderScreens(saveData);
+}
+
+function unplaceHullCell(x, y) {
+  const activeShip = activeShipFor();
+
+  if (!activeShip) {
+    return;
+  }
+
+  if (!isAtHomeworldSavePoint()) {
+    unplacePartArmed = false;
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  const cellKey = `${x},${y}`;
+  activeShip.hullCells = Array.isArray(activeShip.hullCells) ? activeShip.hullCells : [];
+
+  if (!activeShip.hullCells.includes(cellKey)) {
+    builderStatusText = "No metal there";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  const coveredByPart = layoutForShip(activeShip).some((placedPart) => {
+    const part = partLabels[placedPart.partId];
+
+    return part && occupiedCellsFor(placedPart, part).includes(cellKey);
+  });
+
+  if (coveredByPart) {
+    builderStatusText = "Remove the part first";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  activeShip.hullCells = activeShip.hullCells.filter((hullCell) => hullCell !== cellKey);
+  saveData.resources.metal = (saveData.resources.metal ?? 0) + 1;
+  selectedBuilderPartId = METAL_OUTLINE_ID;
+  selectedPlacedPartId = null;
+  unplacePartArmed = false;
+  Object.assign(saveData, saveGameData(saveData));
+  builderStatusText = `Removed metal outline (${saveData.resources.metal} metal ready)`;
   renderPlaceholderScreens(saveData);
 }
 
