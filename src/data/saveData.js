@@ -3,6 +3,7 @@ export const SAVE_STORAGE_KEY = "galaxy-exploration.save.v2";
 export const RESOURCE_TYPES = Object.freeze(["metal", "oil", "iron", "copper", "ice", "water"]);
 
 export const STARTER_PART_IDS = Object.freeze([]);
+export const STARTER_PAINT_IDS = Object.freeze([]);
 export const STARTER_SHIP_GRID = Object.freeze({
   columns: 12,
   rows: 16,
@@ -36,6 +37,7 @@ export function createDefaultSaveData() {
     money: 25000,
     resources: { ...STARTER_RESOURCES },
     unlockedParts: [...STARTER_PART_IDS],
+    unlockedPaints: [...STARTER_PAINT_IDS],
     discoveredPlanets: [...STARTER_PLANET_IDS],
     builtShips: [
       {
@@ -82,6 +84,7 @@ export function normalizeSaveData(candidate) {
     money: normalizeMoney(candidate.money, fallback.money),
     resources: normalizeResourceInventory(candidate.resources, fallback.resources),
     unlockedParts: normalizeStringList(candidate.unlockedParts, fallback.unlockedParts),
+    unlockedPaints: normalizeStringList(candidate.unlockedPaints, fallback.unlockedPaints),
     discoveredPlanets: normalizeStringList(
       candidate.discoveredPlanets,
       fallback.discoveredPlanets,
@@ -256,6 +259,9 @@ function normalizeShipLayout(value, fallback) {
       x: normalizeGridPosition(part.x),
       y: normalizeGridPosition(part.y),
       rotation: normalizeRotation(part.rotation),
+      ...(typeof part.paintId === "string" && part.paintId.length > 0
+        ? { paintId: part.paintId }
+        : {}),
     }));
 
   return normalizedLayout.length > 0 ? normalizedLayout : cloneLayout(fallback);

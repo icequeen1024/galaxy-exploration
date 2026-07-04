@@ -43,15 +43,25 @@ async function buyPartTemplate(page, partId) {
     .click();
 }
 
-async function seedBuilderSave(page, { hullCells = [], resources = {}, unlockedParts = [] }) {
+async function seedBuilderSave(
+  page,
+  { hullCells = [], resources = {}, unlockedParts = [], unlockedPaints = [] },
+) {
   await page.evaluate(
-    ({ saveKey, hullCells: nextHullCells, resources: nextResources, unlockedParts: nextParts }) => {
+    ({
+      saveKey,
+      hullCells: nextHullCells,
+      resources: nextResources,
+      unlockedParts: nextParts,
+      unlockedPaints: nextPaints,
+    }) => {
       const saveData = JSON.parse(localStorage.getItem(saveKey));
       const activeShip =
         saveData.builtShips.find((ship) => ship.id === saveData.activeShipId) ??
         saveData.builtShips[0];
 
       saveData.unlockedParts = [...new Set([...saveData.unlockedParts, ...nextParts])];
+      saveData.unlockedPaints = [...new Set([...(saveData.unlockedPaints ?? []), ...nextPaints])];
       saveData.resources = { ...saveData.resources, ...nextResources };
       activeShip.hullCells = nextHullCells;
       activeShip.layout = [];
@@ -63,6 +73,7 @@ async function seedBuilderSave(page, { hullCells = [], resources = {}, unlockedP
       hullCells,
       resources,
       unlockedParts,
+      unlockedPaints,
     },
   );
   await reloadReadyGame(page);
@@ -133,6 +144,7 @@ test("buys costly part templates from the Parts Bay", async ({ page }) => {
   await page.getByRole("button", { name: "Parts" }).click();
   const parts = page.locator('[data-screen-panel="shop"]');
   const metalPack = parts.locator('[data-part-id="metal-outline"]');
+  const brownPaint = parts.locator('[data-part-id="paint-brown"]');
   const airMaker = parts.locator('[data-part-id="air-maker-basic"]');
   const tank = parts.locator('[data-part-id="tank-kerolox-m"]');
 
@@ -140,6 +152,8 @@ test("buys costly part templates from the Parts Bay", async ({ page }) => {
   await expect(page.locator("#shop-money")).toContainText("25,000 credits | Metal 0");
   await expect(metalPack).toContainText("Metal Pack");
   await expect(metalPack).toContainText("1,200 credits");
+  await expect(brownPaint).toContainText("Brown Paint");
+  await expect(brownPaint).toContainText("450 credits");
   await expect(airMaker).toContainText("Air Maker");
   await expect(airMaker).toContainText("1,800 credits");
   await expect(airMaker).toContainText("Required for launch");
@@ -158,6 +172,75 @@ test("buys costly part templates from the Parts Bay", async ({ page }) => {
   expect(savedData.resources.metal).toBe(12);
   expect(savedData.unlockedParts).toContain("air-maker-basic");
   expect(savedData.money).toBe(22000);
+});
+
+test("buys paint colors from the Parts Bay", async ({ page }) => {
+  await openReadyGame(page);
+
+  await page.getByRole("button", { name: "Parts" }).click();
+  const parts = page.locator('[data-screen-panel="shop"]');
+  const brownPaint = parts.locator('[data-part-id="paint-brown"]');
+
+  await expect(brownPaint).toContainText("Brown Paint");
+  await expect(brownPaint).toContainText("450 credits");
+  await brownPaint.getByRole("button", { name: "Buy" }).click();
+
+  await expect(page.locator("#shop-money")).toContainText("24,550 credits");
+  await expect(brownPaint.getByRole("button", { name: "Owned" })).toBeVisible();
+
+  const savedData = await page.evaluate(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
+  });
+
+  expect(savedData.unlockedPaints).toContain("paint-brown");
+  expect(savedData.money).toBe(24550);
+});
+
+test("buys paint and paints a placed ship part", async ({ page }) => {
+  test.setTimeout(60000);
+  await openReadyGame(page);
+  await seedBuilderSave(page, {
+    unlockedParts: ["tank-kerolox-s"],
+    unlockedPaints: ["paint-brown"],
+  });
+
+  await page.getByRole("button", { name: "Builder" }).click();
+  const builder = page.locator('[data-screen-panel="builder"]');
+  const tank = builder.locator('[data-builder-part="tank-kerolox-s"]');
+  const brownPaint = builder.locator('[data-builder-part="paint-brown"]');
+
+  await expect(brownPaint).toContainText("Brown Paint");
+  await tank.dispatchEvent("click");
+  await builder.locator('[data-builder-cell="1,1"]').dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText("Placed Kerolox Tank S");
+
+  const placedTank = builder.locator('[data-placed-part="tank-kerolox-s"]');
+  await expect(placedTank).toContainText("Factory Color");
+  await brownPaint.dispatchEvent("click");
+  await placedTank.dispatchEvent("click");
+  await expect(page.locator("#builder-status")).toContainText(
+    "Painted Kerolox Tank S brown",
+  );
+  await expect(placedTank).toContainText("Brown Paint");
+
+  const paintedPartStyle = await placedTank.evaluate((element) => {
+    return element.style.getPropertyValue("--part-color").trim();
+  });
+  const savedData = await page.evaluate(() => {
+    return JSON.parse(localStorage.getItem("galaxy-exploration.save.v2"));
+  });
+  const activeShip = savedData.builtShips.find(
+    (ship) => ship.id === savedData.activeShipId,
+  );
+
+  expect(paintedPartStyle).toBe("#6b3f25");
+  expect(savedData.unlockedPaints).toContain("paint-brown");
+  expect(activeShip.layout).toContainEqual(
+    expect.objectContaining({
+      partId: "tank-kerolox-s",
+      paintId: "paint-brown",
+    }),
+  );
 });
 
 test("places a part before sealing it with metal lines", async ({ page }) => {

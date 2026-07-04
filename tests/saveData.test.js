@@ -18,6 +18,7 @@ describe("save data", () => {
     expect(saveData.resources.water).toBeGreaterThan(0);
     expect(Object.keys(saveData.resources)).toEqual(RESOURCE_TYPES);
     expect(saveData.unlockedParts).toEqual([]);
+    expect(saveData.unlockedPaints).toEqual([]);
     expect(saveData.discoveredPlanets).toContain("homeworld");
     expect(saveData.activeMissionPlanetId).toBe("ember");
     expect(saveData.builtShips[0]).toMatchObject({
@@ -54,6 +55,7 @@ describe("save data", () => {
     expect(normalized.resources.metal).toBe(0);
     expect(normalized.resources.water).toBe(7);
     expect(normalized.unlockedParts).toEqual([]);
+    expect(normalized.unlockedPaints).toEqual([]);
     expect(normalized.discoveredPlanets).toContain("homeworld");
     expect(normalized.activeMissionPlanetId).toBe("ember");
     expect(normalized.builtShips).toHaveLength(1);
@@ -64,5 +66,35 @@ describe("save data", () => {
       planetName: "Homeworld",
       savedAt: null,
     });
+  });
+
+  it("keeps bought paint colors and painted ship parts", () => {
+    const normalized = normalizeSaveData({
+      ...createDefaultSaveData(),
+      unlockedPaints: ["paint-brown"],
+      builtShips: [
+        {
+          ...createDefaultSaveData().builtShips[0],
+          layout: [
+            {
+              id: "painted-tank",
+              partId: "tank-kerolox-s",
+              x: 1,
+              y: 2,
+              rotation: 90,
+              paintId: "paint-brown",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(normalized.unlockedPaints).toContain("paint-brown");
+    expect(normalized.builtShips[0].layout).toContainEqual(
+      expect.objectContaining({
+        id: "painted-tank",
+        paintId: "paint-brown",
+      }),
+    );
   });
 });

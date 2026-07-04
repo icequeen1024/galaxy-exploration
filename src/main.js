@@ -81,6 +81,10 @@ const ROCKET_VISUAL_SCALE = 0.32;
 const ROCKET_SURFACE_OFFSET = 26;
 const HOMEWORLD_VIEW_SCALE = 0.0072;
 const SHIP_CONTACT_RADIUS = ROCKET_SURFACE_OFFSET / HOMEWORLD_VIEW_SCALE;
+const SHIP_DRAW_MAX_WIDTH = 96;
+const SHIP_DRAW_MAX_HEIGHT = 136;
+const SHIP_DRAW_MAX_CELL = 18;
+const SHIP_DRAW_MIN_CELL = 6;
 const MINIMAP_MARGIN = 16;
 const HOMEWORLD_RETURN_TARGET_ALTITUDE = 500;
 
@@ -418,6 +422,58 @@ const PART_CATALOG = [
   },
 ];
 const partLabels = Object.fromEntries(PART_CATALOG.map((part) => [part.id, part]));
+const PAINT_CATALOG = [
+  {
+    id: "paint-white",
+    name: "White Paint",
+    shortName: "white",
+    color: "#f7fbff",
+    cost: 300,
+  },
+  {
+    id: "paint-red",
+    name: "Red Paint",
+    shortName: "red",
+    color: "#d95b4a",
+    cost: 350,
+  },
+  {
+    id: "paint-blue",
+    name: "Blue Paint",
+    shortName: "blue",
+    color: "#4d8fa8",
+    cost: 350,
+  },
+  {
+    id: "paint-green",
+    name: "Green Paint",
+    shortName: "green",
+    color: "#397c65",
+    cost: 350,
+  },
+  {
+    id: "paint-yellow",
+    name: "Yellow Paint",
+    shortName: "yellow",
+    color: "#f2c76e",
+    cost: 400,
+  },
+  {
+    id: "paint-brown",
+    name: "Brown Paint",
+    shortName: "brown",
+    color: "#6b3f25",
+    cost: 450,
+  },
+  {
+    id: "paint-black",
+    name: "Black Paint",
+    shortName: "black",
+    color: "#24262d",
+    cost: 500,
+  },
+];
+const paintLabels = Object.fromEntries(PAINT_CATALOG.map((paint) => [paint.id, paint]));
 const BUILDER_GRID_COLUMNS = STARTER_SHIP_GRID.columns;
 const BUILDER_GRID_ROWS = STARTER_SHIP_GRID.rows;
 const REQUIRED_LIFE_SUPPORT_PART_ID = "air-maker-basic";
@@ -493,6 +549,7 @@ const spacePlanets = new Graphics();
 const launchPad = new Graphics();
 const rocket = new Container();
 const plume = new Graphics();
+const shipBody = new Graphics();
 const explosion = new Sprite(explosionTexture);
 const minimap = new Graphics();
 const trajectoryText = new Text({
@@ -506,7 +563,7 @@ const trajectoryText = new Text({
 
 backgroundLayer.addChild(background, stars, distantWorlds);
 worldLayer.addChild(planet, spacePlanets, launchPad);
-rocket.addChild(plume, createRocketBody());
+rocket.addChild(plume, shipBody);
 explosion.anchor.set(0.5);
 explosion.visible = false;
 explosion.blendMode = "screen";
@@ -802,6 +859,29 @@ function buyMetal() {
   renderPlaceholderScreens(saveData);
 }
 
+function buyPaint(paintId) {
+  const paint = paintLabels[paintId];
+
+  if (!paint || saveData.unlockedPaints.includes(paint.id) || !isAtHomeworldSavePoint()) {
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  if (saveData.money < paint.cost) {
+    builderStatusText = "Not enough credits";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  saveData.money -= paint.cost;
+  saveData.unlockedPaints.push(paint.id);
+  selectedBuilderPartId = paint.id;
+  selectedPlacedPartId = null;
+  builderStatusText = `Bought ${paint.name}`;
+  Object.assign(saveData, saveGameData(saveData));
+  renderPlaceholderScreens(saveData);
+}
+
 function switchScreen(screenId) {
   activeScreen = screenId;
   if (screenId !== "builder") {
@@ -828,8 +908,9 @@ function renderPlaceholderScreens(data) {
   const activeShip = activeShipFor(data);
   lifeSupportStatusText = lifeSupportStatusFor(activeShip).message;
   const metalAmount = data.resources.metal ?? 0;
+  const paintCount = data.unlockedPaints.length;
 
-  screenUi.shopMoney.textContent = `${data.money.toLocaleString()} credits | Metal ${metalAmount}`;
+  screenUi.shopMoney.textContent = `${data.money.toLocaleString()} credits | Metal ${metalAmount} | Paints ${paintCount}`;
   screenUi.builderShipName.textContent = activeShip?.name ?? "No Ship";
   screenUi.travelPlanetCount.textContent = `${data.discoveredPlanets.length} world${
     data.discoveredPlanets.length === 1 ? "" : "s"
@@ -847,6 +928,21 @@ function renderPlaceholderScreens(data) {
       buttonTitle: partsBayButtonTitle(false, canShop, data.money >= METAL_PACK_COST),
       onAction: buyMetal,
     },
+    ...PAINT_CATALOG.map((paint) => {
+      const isOwned = data.unlockedPaints.includes(paint.id);
+      const canAfford = data.money >= paint.cost;
+
+      return {
+        partId: paint.id,
+        label: isOwned ? "Owned | Paint" : "Paint",
+        name: paint.name,
+        detail: `${paint.cost.toLocaleString()} credits. Paint placed ship parts ${paint.shortName}.`,
+        buttonLabel: isOwned ? "Owned" : "Buy",
+        buttonDisabled: isOwned || !canShop || !canAfford,
+        buttonTitle: partsBayButtonTitle(isOwned, canShop, canAfford),
+        onAction: () => buyPaint(paint.id),
+      };
+    }),
     ...PART_CATALOG.map((part) => {
       const isOwned = data.unlockedParts.includes(part.id);
       const canAfford = data.money >= part.cost;
@@ -889,17 +985,21 @@ function renderBuilder(activeShip) {
   const availableParts = saveData.unlockedParts
     .map((partId) => partLabels[partId])
     .filter(Boolean);
+  const availablePaints = saveData.unlockedPaints
+    .map((paintId) => paintLabels[paintId])
+    .filter(Boolean);
   const lifeSupport = lifeSupportStatusFor(activeShip);
   const metalAmount = saveData.resources.metal ?? 0;
   const metalLines = metalPiecesForShip(activeShip).total;
   const statusText =
     builderStatusText === "Ready"
-      ? `${lifeSupport.message} | Metal ${metalAmount} | Ship metal ${metalLines} lines | ${availableParts.length} owned parts`
+      ? `${lifeSupport.message} | Metal ${metalAmount} | Ship metal ${metalLines} lines | ${availablePaints.length} paints | ${availableParts.length} owned parts`
       : builderStatusText;
 
   screenUi.builderStatus.textContent = canBuild ? statusText : "Return to Homeworld";
   screenUi.builderShipParts.replaceChildren(
     createMetalOutlineItem(canBuild),
+    ...availablePaints.map((paint) => createBuilderPaintItem(paint, canBuild)),
     ...availableParts.map((part) => createBuilderPartItem(part, canBuild)),
   );
   screenUi.builderGraph.replaceChildren(createShipGrid(activeShip, canBuild));
@@ -939,6 +1039,53 @@ function createMetalOutlineItem(canBuild) {
     draggedPlacedPartId = null;
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData("text/plain", `part:${METAL_OUTLINE_ID}`);
+  });
+  item.addEventListener("dragend", () => {
+    draggedBuilderPartId = null;
+  });
+
+  return item;
+}
+
+function createBuilderPaintItem(paint, canBuild) {
+  const item = document.createElement("button");
+  const category = document.createElement("span");
+  const name = document.createElement("strong");
+  const detail = document.createElement("small");
+  const swatch = document.createElement("i");
+
+  item.className = "builder-part builder-part-paint";
+  item.type = "button";
+  item.draggable = canBuild;
+  item.dataset.builderPart = paint.id;
+  item.dataset.paintId = paint.id;
+  item.dataset.category = "Paint";
+  item.setAttribute("aria-label", `${paint.name}, paint color`);
+  item.style.setProperty("--paint-color", paint.color);
+  category.textContent = "Paint | color";
+  swatch.className = "paint-swatch";
+  swatch.setAttribute("aria-hidden", "true");
+  name.textContent = paint.name;
+  detail.textContent = "Click a placed part to paint it.";
+  name.prepend(swatch);
+  item.append(category, name, detail);
+
+  if (selectedBuilderPartId === paint.id) {
+    item.classList.add("is-selected");
+  }
+
+  item.addEventListener("click", () => {
+    selectedBuilderPartId = paint.id;
+    selectedPlacedPartId = null;
+    unplacePartArmed = false;
+    builderStatusText = `${paint.name} selected`;
+    renderPlaceholderScreens(saveData);
+  });
+  item.addEventListener("dragstart", (event) => {
+    draggedBuilderPartId = paint.id;
+    draggedPlacedPartId = null;
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("text/plain", `paint:${paint.id}`);
   });
   item.addEventListener("dragend", () => {
     draggedBuilderPartId = null;
@@ -1092,6 +1239,7 @@ function createPlacedGridPart(placedPart, part, canBuild) {
   const name = document.createElement("strong");
   const detail = document.createElement("small");
   const size = rotatedPartSize(part, placedPart.rotation);
+  const paint = paintForPlacedPart(placedPart);
 
   node.className = "builder-grid-part";
   node.type = "button";
@@ -1103,11 +1251,11 @@ function createPlacedGridPart(placedPart, part, canBuild) {
   node.style.setProperty("--part-y", placedPart.y);
   node.style.setProperty("--part-width", size.width);
   node.style.setProperty("--part-height", size.height);
-  node.style.setProperty("--part-color", part.color);
+  node.style.setProperty("--part-color", paint.color);
   node.setAttribute("aria-label", `${part.name}, placed on grid`);
   category.textContent = `${part.category} | ${formatPartFootprint(part, placedPart.rotation)}`;
   name.textContent = part.name;
-  detail.textContent = placedPartSealText(placedPart, part);
+  detail.textContent = `${placedPartSealText(placedPart, part)} | ${paint.name}`;
   node.append(category, name, detail);
 
   if (placedPart.id === selectedPlacedPartId) {
@@ -1137,6 +1285,11 @@ function createPlacedGridPart(placedPart, part, canBuild) {
 
     if (selectedBuilderPartId === METAL_OUTLINE_ID && pointedCell) {
       buildHullCell(pointedCell.x, pointedCell.y);
+      return;
+    }
+
+    if (paintLabels[selectedBuilderPartId]) {
+      paintPlacedPart(placedPart.id, selectedBuilderPartId);
       return;
     }
 
@@ -1178,6 +1331,11 @@ function placeDroppedBuilderItem(dataTransferValue, x, y) {
     return;
   }
 
+  if (dataTransferValue?.startsWith("paint:")) {
+    paintPlacedPartAtCell(dataTransferValue.slice("paint:".length), x, y);
+    return;
+  }
+
   if (draggedPlacedPartId) {
     movePlacedPartToGrid(draggedPlacedPartId, x, y);
     return;
@@ -1186,6 +1344,11 @@ function placeDroppedBuilderItem(dataTransferValue, x, y) {
   if (draggedBuilderPartId) {
     if (draggedBuilderPartId === METAL_OUTLINE_ID) {
       buildHullCell(x, y);
+      return;
+    }
+
+    if (paintLabels[draggedBuilderPartId]) {
+      paintPlacedPartAtCell(draggedBuilderPartId, x, y);
       return;
     }
 
@@ -1207,6 +1370,11 @@ function placeBuilderSelectionAt(x, y) {
   if (selectedBuilderPartId) {
     if (selectedBuilderPartId === METAL_OUTLINE_ID) {
       buildHullCell(x, y);
+      return;
+    }
+
+    if (paintLabels[selectedBuilderPartId]) {
+      paintPlacedPartAtCell(selectedBuilderPartId, x, y);
       return;
     }
 
@@ -1341,6 +1509,52 @@ function unplacePlacedPart(placedPartId) {
   unplacePartArmed = false;
   Object.assign(saveData, saveGameData(saveData));
   builderStatusText = `Returned ${part.name} to templates`;
+  renderPlaceholderScreens(saveData);
+}
+
+function paintPlacedPartAtCell(paintId, x, y) {
+  const activeShip = activeShipFor();
+  const placedPart = placedPartAtCell(activeShip, `${x},${y}`);
+
+  if (!placedPart) {
+    builderStatusText = "Click a placed part to paint it";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  paintPlacedPart(placedPart.id, paintId);
+}
+
+function paintPlacedPart(placedPartId, paintId) {
+  const activeShip = activeShipFor();
+  const paint = paintLabels[paintId];
+  const placedPart = layoutForShip(activeShip).find((item) => item.id === placedPartId);
+  const part = partLabels[placedPart?.partId];
+
+  if (!activeShip || !paint || !placedPart || !part) {
+    return;
+  }
+
+  if (!saveData.unlockedPaints.includes(paint.id)) {
+    builderStatusText = "Buy that paint first";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  if (!isAtHomeworldSavePoint()) {
+    builderStatusText = "Return to Homeworld";
+    renderPlaceholderScreens(saveData);
+    return;
+  }
+
+  activeShip.layout = layoutForShip(activeShip).map((item) =>
+    item.id === placedPartId ? { ...item, paintId: paint.id } : item,
+  );
+  selectedBuilderPartId = paint.id;
+  selectedPlacedPartId = placedPartId;
+  unplacePartArmed = false;
+  Object.assign(saveData, saveGameData(saveData));
+  builderStatusText = `Painted ${part.name} ${paint.shortName}`;
   renderPlaceholderScreens(saveData);
 }
 
@@ -1572,6 +1786,17 @@ function layoutForShip(activeShip) {
   return Array.isArray(activeShip?.layout) ? activeShip.layout : [];
 }
 
+function paintForPlacedPart(placedPart, part = partLabels[placedPart?.partId]) {
+  const paint = paintLabels[placedPart?.paintId];
+
+  return {
+    id: paint?.id ?? "factory",
+    name: paint?.name ?? "Factory Color",
+    shortName: paint?.shortName ?? "factory",
+    color: paint?.color ?? part?.color ?? "#d8e4ed",
+  };
+}
+
 function metalPiecesForShip(activeShip) {
   const counts = new Map();
   let total = 0;
@@ -1769,9 +1994,11 @@ function render() {
 
   drawBackground(width, height, state.altitude);
   drawWorld(width, height, visualState);
+  const shipVisualBounds = drawActiveShipBody(shipBody, activeShipFor());
   drawPlume(
     Number(hud.throttle.value) / 100,
     state.launched && state.fuelMass > 0 && !TERMINAL_OUTCOMES.has(state.outcome),
+    shipVisualBounds,
   );
   drawExplosion(visualState);
 
@@ -2445,23 +2672,26 @@ function drawLaunchPad(visualState) {
     .fill({ color: 0xeaf9ff, alpha: padAlpha * 0.9 });
 }
 
-function drawPlume(throttle, isActive) {
+function drawPlume(throttle, isActive, shipVisualBounds = defaultShipVisualBounds()) {
   plume.clear();
 
   if (!isActive || throttle <= 0) {
     return;
   }
 
+  const shipWidth = shipVisualBounds.right - shipVisualBounds.left;
+  const halfWidth = clampNumber(shipWidth * 0.14, 6, 14);
+  const startY = shipVisualBounds.bottom - 3;
   const length = 44 + throttle * 82;
   plume
-    .moveTo(-10, 54)
-    .lineTo(0, 54 + length)
-    .lineTo(10, 54)
+    .moveTo(-halfWidth, startY)
+    .lineTo(0, startY + length)
+    .lineTo(halfWidth, startY)
     .closePath()
     .fill({ color: 0xffc857, alpha: 0.72 })
-    .moveTo(-5, 52)
-    .lineTo(0, 52 + length * 0.68)
-    .lineTo(5, 52)
+    .moveTo(-halfWidth * 0.48, startY - 2)
+    .lineTo(0, startY + length * 0.68)
+    .lineTo(halfWidth * 0.48, startY - 2)
     .closePath()
     .fill({ color: 0xd9f7ff, alpha: 0.88 });
 }
@@ -2483,10 +2713,107 @@ function drawExplosion(visualState) {
   explosion.alpha = 0.76 + fuelRatio * 0.22;
 }
 
-function createRocketBody() {
-  const body = new Graphics();
+function drawActiveShipBody(target, activeShip) {
+  const layout = layoutForShip(activeShip).filter((placedPart) => partLabels[placedPart.partId]);
 
-  body
+  target.clear();
+
+  if (layout.length === 0) {
+    drawDefaultRocketBody(target);
+    return defaultShipVisualBounds();
+  }
+
+  const bounds = shipLayoutBounds(layout);
+  const cellSize = clampNumber(
+    Math.min(
+      SHIP_DRAW_MAX_CELL,
+      SHIP_DRAW_MAX_WIDTH / bounds.width,
+      SHIP_DRAW_MAX_HEIGHT / bounds.height,
+    ),
+    SHIP_DRAW_MIN_CELL,
+    SHIP_DRAW_MAX_CELL,
+  );
+  const shipWidth = bounds.width * cellSize;
+  const shipHeight = bounds.height * cellSize;
+  const left = -shipWidth * 0.5;
+  const top = -shipHeight * 0.5;
+
+  for (const placedPart of layout) {
+    const part = partLabels[placedPart.partId];
+    const paint = paintForPlacedPart(placedPart, part);
+    const size = rotatedPartSize(part, placedPart.rotation);
+    const x = left + (placedPart.x - bounds.minX) * cellSize;
+    const y = top + (placedPart.y - bounds.minY) * cellSize;
+    const width = size.width * cellSize;
+    const height = size.height * cellSize;
+    const color = cssHexToNumber(paint.color);
+    const highlight = mixColor(color, 0xffffff, 0.24);
+    const shade = mixColor(color, 0x05070d, 0.32);
+
+    target
+      .rect(x, y, width, height)
+      .fill(color)
+      .rect(x, y, width, Math.max(2, cellSize * 0.18))
+      .fill({ color: highlight, alpha: 0.38 })
+      .rect(x, y + height - Math.max(2, cellSize * 0.16), width, Math.max(2, cellSize * 0.16))
+      .fill({ color: shade, alpha: 0.28 })
+      .rect(x, y, width, height)
+      .stroke({ color: 0x07111d, alpha: 0.78, width: 1.5 });
+
+    drawShipPartGridLines(target, x, y, size.width, size.height, cellSize);
+  }
+
+  return {
+    left,
+    right: left + shipWidth,
+    top,
+    bottom: top + shipHeight,
+  };
+}
+
+function shipLayoutBounds(layout) {
+  return layout.reduce(
+    (bounds, placedPart) => {
+      const part = partLabels[placedPart.partId];
+      const size = rotatedPartSize(part, placedPart.rotation);
+      const minX = Math.min(bounds.minX, placedPart.x);
+      const minY = Math.min(bounds.minY, placedPart.y);
+      const maxX = Math.max(bounds.maxX, placedPart.x + size.width);
+      const maxY = Math.max(bounds.maxY, placedPart.y + size.height);
+
+      return {
+        minX,
+        minY,
+        maxX,
+        maxY,
+        width: maxX - minX,
+        height: maxY - minY,
+      };
+    },
+    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, width: 1, height: 1 },
+  );
+}
+
+function drawShipPartGridLines(target, x, y, columns, rows, cellSize) {
+  for (let column = 1; column < columns; column += 1) {
+    const lineX = x + column * cellSize;
+    target
+      .moveTo(lineX, y)
+      .lineTo(lineX, y + rows * cellSize)
+      .stroke({ color: 0x07111d, alpha: 0.22, width: 1 });
+  }
+
+  for (let row = 1; row < rows; row += 1) {
+    const lineY = y + row * cellSize;
+    target
+      .moveTo(x, lineY)
+      .lineTo(x + columns * cellSize, lineY)
+      .stroke({ color: 0x07111d, alpha: 0.22, width: 1 });
+  }
+}
+
+function drawDefaultRocketBody(target) {
+  target
     .moveTo(0, -76)
     .lineTo(22, -38)
     .lineTo(22, 46)
@@ -2515,8 +2842,26 @@ function createRocketBody() {
     .lineTo(22, 56)
     .closePath()
     .fill(0x8f9daa);
+}
 
-  return body;
+function defaultShipVisualBounds() {
+  return {
+    left: -40,
+    right: 40,
+    top: -76,
+    bottom: 58,
+  };
+}
+
+function cssHexToNumber(color) {
+  if (typeof color !== "string") {
+    return 0xd8e4ed;
+  }
+
+  const normalized = color.trim().replace(/^#/, "");
+  const parsed = Number.parseInt(normalized, 16);
+
+  return Number.isFinite(parsed) ? parsed : 0xd8e4ed;
 }
 
 function mixColor(from, to, amount) {

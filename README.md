@@ -10,10 +10,11 @@ A 2D JavaScript space exploration game prototype built with Vite, PixiJS, and a 
 - Physics model for thrust, fuel burn, gravity, atmosphere, drag, orbit, escape, landing, and crashes.
 - Discoverable planet map with mission targeting and Homeworld return flow.
 - Local save data for money, resources, unlocked parts, built ships, mission history, and save points.
-- Parts Bay and builder screens for buying metal lines, buying parts, and placing ship parts that take up grid space.
-- Buy new parts with credits, move placed parts on the grid, press **R** to rotate, and press **U** then click to unplace a part.
+- Parts Bay and builder screens for buying metal lines, paint colors, parts, and placing ship parts that take up grid space.
+- Buy new parts and paints with credits, move placed parts on the grid, press **R** to rotate, and press **U** then click to unplace a part.
 - Starter save begins with money, water, no owned parts, and an empty graph-paper ship.
 - Metal packs cost credits and create straight sealing lines that go on top of placed parts.
+- The launch ship is drawn from the active builder layout, including each part's paint color.
 - Air Maker life support that consumes water when a launch begins and stops working when water runs out.
 - Unit tests for simulation and save-data behavior, plus Playwright coverage for core UI flows.
 
@@ -51,8 +52,9 @@ Open the local URL printed by Vite, usually `http://127.0.0.1:5173/`.
 - Use the left and right arrow keys, or the on-screen steering buttons, to rotate the ship.
 - Use **Reset** to return to the launch pad.
 - Switch between Launch, Parts, Builder, and Travel from the top navigation.
-- In Parts Bay, buy metal packs and part templates with credits.
+- In Parts Bay, buy metal packs, paint colors, and part templates with credits.
 - In Builder, place a part first, then select Metal Line and click cells on the part to seal them.
+- Select a bought paint color in Builder, then click a placed part to repaint it.
 - Each occupied block needs 2 metal lines. A 2x4 tank uses 8 graph blocks, so it needs 16 metal lines to fully seal.
 - Select a placed part and press **R** to rotate it.
 - Press **U** once, then click a placed part to return it to the template side or click a metal line to remove it.
